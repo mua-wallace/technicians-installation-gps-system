@@ -1,5 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useAppStore } from './store/useAppStore'
+import { useAuthStore } from './store/auth.store'
+import { useQuery } from '@tanstack/react-query'
+import { usersApi } from './api/users'
 
 type InterventionRow = {
   id: number
@@ -148,13 +151,29 @@ function CheckRow({ label, checked }: { label: string; checked: boolean }) {
 
 export function App() {
   const {
-    technicianName,
-    setTechnicianName,
     currentForm,
     updateFormField,
     submitForm,
     resetForm,
   } = useAppStore()
+  const authUser = useAuthStore((s) => s.user)
+  const profile = useAuthStore((s) => s.profile)
+  const setProfile = useAuthStore((s) => s.setProfile)
+  const clearAuth = useAuthStore((s) => s.clearAuth)
+
+  const meQuery = useQuery({
+    queryKey: ['users', 'me'],
+    queryFn: usersApi.me,
+    enabled: true,
+    staleTime: 60_000,
+  })
+
+  useEffect(() => {
+    if (meQuery.data) setProfile(meQuery.data)
+  }, [meQuery.data, setProfile])
+
+  const displayName = profile?.fullname || profile?.username || authUser?.username || '—'
+  const displayRole = profile?.role || '—'
 
   const [showDrawer, setShowDrawer] = useState(false)
   const [sheetType, setSheetType] = useState<'installation' | 'intervention' | null>(null)
@@ -215,13 +234,13 @@ export function App() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <input
-              type="text"
-              placeholder="Technician name"
-              className="w-48 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm outline-none ring-brand-accent/50 focus:ring-2"
-              value={technicianName}
-              onChange={(e) => setTechnicianName(e.target.value)}
-            />
+            <div className="hidden items-center gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-1.5 text-xs text-slate-300 md:flex">
+              <span className="text-slate-500">Technician</span>
+              <span className="font-medium text-slate-100">{displayName}</span>
+              <span className="text-slate-600">·</span>
+              <span className="text-slate-300">{displayRole}</span>
+              {meQuery.isFetching ? <span className="text-slate-600">(sync…)</span> : null}
+            </div>
             <button
               type="button"
               className="rounded-md bg-sky-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-50 shadow-sm hover:bg-sky-700"
@@ -232,6 +251,16 @@ export function App() {
               }}
             >
               Nouvelle fiche
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-slate-700 bg-slate-900 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-200 hover:bg-slate-800"
+              onClick={() => {
+                clearAuth()
+                window.location.href = '/login'
+              }}
+            >
+              Logout
             </button>
           </div>
         </header>
