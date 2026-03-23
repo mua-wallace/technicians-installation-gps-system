@@ -2,7 +2,7 @@ import axios from 'axios'
 import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 
 function getApiBaseUrl(): string {
-  let url = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api/v1/'
+  let url = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5400/api/v1/'
   if (
     typeof window !== 'undefined' &&
     window.location?.protocol === 'https:' &&

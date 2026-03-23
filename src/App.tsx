@@ -224,8 +224,8 @@ export function App() {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-slate-950 text-slate-50">
       <div className="mx-auto flex min-h-0 w-full flex-1 flex-col px-3 md:px-6">
-        <header className="flex h-20 shrink-0 items-center justify-between gap-4 border-b border-slate-800 bg-slate-950 py-4">
-          <div>
+        <header className="flex shrink-0 flex-col gap-4 border-b border-slate-800 bg-slate-950 py-4 md:h-20 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
             <h1 className="text-2xl font-semibold tracking-tight text-slate-50">
               malambi
             </h1>
@@ -233,35 +233,37 @@ export function App() {
               Fiches d&apos;installation et d&apos;intervention GPS pour techniciens
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden items-center gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-1.5 text-xs text-slate-300 md:flex">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+            <div className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-3 py-1.5 text-xs text-slate-300">
               <span className="text-slate-500">Technician</span>
-              <span className="font-medium text-slate-100">{displayName}</span>
+              <span className="min-w-0 truncate font-medium text-slate-100">{displayName}</span>
               <span className="text-slate-600">·</span>
               <span className="text-slate-300">{displayRole}</span>
               {meQuery.isFetching ? <span className="text-slate-600">(sync…)</span> : null}
             </div>
-            <button
-              type="button"
-              className="rounded-md bg-sky-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-50 shadow-sm hover:bg-sky-700"
-              onClick={() => {
-                setSheetType(null)
-                resetForm()
-                setShowDrawer(true)
-              }}
-            >
-              Nouvelle fiche
-            </button>
-            <button
-              type="button"
-              className="rounded-md border border-slate-700 bg-slate-900 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-200 hover:bg-slate-800"
-              onClick={() => {
-                clearAuth()
-                window.location.href = '/login'
-              }}
-            >
-              Logout
-            </button>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-3">
+              <button
+                type="button"
+                className="min-h-10 rounded-md bg-sky-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-50 shadow-sm hover:bg-sky-700"
+                onClick={() => {
+                  setSheetType(null)
+                  resetForm()
+                  setShowDrawer(true)
+                }}
+              >
+                Nouvelle fiche
+              </button>
+              <button
+                type="button"
+                className="min-h-10 rounded-md border border-slate-700 bg-slate-900 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-200 hover:bg-slate-800"
+                onClick={() => {
+                  clearAuth()
+                  window.location.href = '/login'
+                }}
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </header>
 
