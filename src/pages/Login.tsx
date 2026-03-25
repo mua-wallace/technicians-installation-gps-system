@@ -30,6 +30,11 @@ function BrandMark() {
   )
 }
 
+function getApiDisplayUrl(): string {
+  const configured = import.meta.env.VITE_API_BASE_URL || '/api/v1/'
+  return configured.replace(/\/+$/, '')
+}
+
 export default function Login() {
   const navigate = useNavigate()
   const setAuth = useAuthStore((s) => s.setAuth)
@@ -39,6 +44,7 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const apiDisplayUrl = useMemo(() => getApiDisplayUrl(), [])
 
   const isFormValid = useMemo(() => username.trim().length > 0 && password.length > 0, [username, password])
 
@@ -180,7 +186,7 @@ export default function Login() {
                 </button>
 
                 <p className="text-center text-xs text-slate-500">
-                  API: <span className="font-medium text-slate-300">http://localhost:5001/api/v1</span>
+                  API: <span className="font-medium text-slate-300">{apiDisplayUrl}</span>
                 </p>
               </form>
             </div>

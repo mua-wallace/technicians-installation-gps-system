@@ -3,11 +3,20 @@ import react from '@vitejs/plugin-react-swc'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig(({ command }) => {
-  // Note: `vite-plugin-pwa`/workbox SW generation currently errors on build in this repo.
-  // We keep it enabled for dev, and skip it for production builds until it's resolved.
-  const enablePwa = command === 'serve'
+  // Keep PWA disabled to avoid service-worker cache/network interference during development.
+  // It can be re-enabled later once runtime networking is fully stable.
+  const enablePwa = false
 
   return {
+    server: {
+      proxy: {
+        '/api': {
+          target: 'http://localhost:5400',
+          changeOrigin: true,
+          secure: false,
+        },
+      },
+    },
     plugins: [
       react(),
       ...(enablePwa

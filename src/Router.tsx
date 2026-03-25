@@ -2,7 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import Login from './pages/Login'
 import { ProtectedRoute } from './routes/ProtectedRoute'
 import { RootRedirect } from './routes/RootRedirect'
-import { App } from './App'
+import { TaskApp } from './TaskApp'
 
 export function Router() {
   return (
@@ -14,7 +14,7 @@ export function Router() {
           path="/app"
           element={
             <ProtectedRoute>
-              <App />
+              <TaskApp />
             </ProtectedRoute>
           }
         />
