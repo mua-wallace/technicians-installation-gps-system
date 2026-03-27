@@ -3,7 +3,7 @@ import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 
 function getApiBaseUrl(): string {
   const url = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5400/api/v1/'
-  return url.replace(/\/+$/, '')
+  return String(url).replace(/\/+$/, '')
 }
 
 const API_BASE_URL = getApiBaseUrl()
