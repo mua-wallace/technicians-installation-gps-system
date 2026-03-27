@@ -24,16 +24,67 @@ type Props = {
   loading?: boolean
   onSelectTask: (taskId: string) => void
   showTechnicians?: boolean
+  title?: string
+  search: string
+  onSearchChange: (next: string) => void
+  typeFilter: string
+  onTypeFilterChange: (next: string) => void
+  statusFilter: string
+  onStatusFilterChange: (next: string) => void
 }
 
-export function TaskList({ tasks, loading, onSelectTask, showTechnicians }: Props) {
+export function TaskList({
+  tasks,
+  loading,
+  onSelectTask,
+  showTechnicians,
+  title = 'My tasks',
+  search,
+  onSearchChange,
+  typeFilter,
+  onTypeFilterChange,
+  statusFilter,
+  onStatusFilterChange,
+}: Props) {
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="shrink-0 mb-3 flex items-center justify-between gap-2">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-slate-700">My tasks</h2>
+        <h2 className="text-sm font-medium uppercase tracking-wide text-slate-700">{title}</h2>
         <span className="text-xs text-slate-500">
           {loading ? 'Loading…' : `${tasks.length} task${tasks.length === 1 ? '' : 's'}`}
         </span>
+      </div>
+
+      <div className="mb-3 grid gap-2 sm:grid-cols-3">
+        <input
+          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-600"
+          placeholder="Search title"
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+        />
+
+        <select
+          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-600"
+          value={typeFilter}
+          onChange={(e) => onTypeFilterChange(e.target.value)}
+        >
+          <option value="">All types</option>
+          <option value="INSTALLATION">Installation</option>
+          <option value="INTERVENTION">Intervention</option>
+        </select>
+
+        <select
+          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-600"
+          value={statusFilter}
+          onChange={(e) => onStatusFilterChange(e.target.value)}
+        >
+          <option value="">All statuses</option>
+          <option value="CREATED">CREATED</option>
+          <option value="ASSIGNED">ASSIGNED</option>
+          <option value="IN_PROGRESS">IN_PROGRESS</option>
+          <option value="COMPLETED">COMPLETED</option>
+          <option value="VERIFIED">VERIFIED</option>
+        </select>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">

@@ -56,6 +56,11 @@ export function TaskApp() {
   const displayName = profile?.fullname || profile?.username || authUser?.username || '—'
   const roleLower = (profile?.role ?? '').toLowerCase()
   const isAdmin = roleLower.includes('admin') || roleLower.includes('supervisor')
+  const roleLabel = useMemo(() => {
+    if (roleLower.includes('admin')) return 'Admin'
+    if (roleLower.includes('supervisor')) return 'Supervisor'
+    return 'Technician'
+  }, [roleLower])
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
 
@@ -64,14 +69,15 @@ export function TaskApp() {
   const [statusFilter, setStatusFilter] = useState<TaskStatus | ''>('')
 
   const tasksQuery = useQuery({
-    queryKey: ['tasks', { search, typeFilter, statusFilter }],
+    // Search is applied client-side so it matches all visible columns (incl. technicians).
+    queryKey: ['tasks', { typeFilter, statusFilter }],
     queryFn: () =>
       tasksApi.listTasks({
         page: 1,
         limit: 200,
         status: statusFilter || undefined,
         type: typeFilter || undefined,
-        search: search || undefined,
+        search: undefined,
         include: 'assignments,technicians,form',
       }),
     enabled: isAuthenticated,
@@ -82,10 +88,34 @@ export function TaskApp() {
 
   const tasksForUI = useMemo(() => {
     const tasks: TaskListItem[] = tasksQuery.data?.data ?? []
-    if (isAdmin) return tasks
-    if (!myUserId) return []
-    return tasks.filter((t) => t.assignments?.some((a) => a.technicianId === myUserId))
-  }, [tasksQuery.data, isAdmin, myUserId])
+    const scoped = isAdmin
+      ? tasks
+      : !myUserId
+        ? []
+        : tasks.filter((t) => t.assignments?.some((a) => a.technicianId === myUserId))
+
+    const q = search.trim().toLowerCase()
+    if (!q) return scoped
+
+    return scoped.filter((t) => {
+      const scheduled = t.scheduledDate ? new Date(t.scheduledDate).toLocaleDateString() : ''
+      const technicians =
+        (t.assignments ?? [])
+          .map((a) => a.technician?.fullname || a.technician?.username || String(a.technicianId ?? ''))
+          .filter(Boolean)
+          .join(' ') ?? ''
+      const haystack = [
+        t.title ?? '',
+        t.type ?? '',
+        t.status ?? '',
+        scheduled,
+        technicians,
+      ]
+        .join(' ')
+        .toLowerCase()
+      return haystack.includes(q)
+    })
+  }, [tasksQuery.data, isAdmin, myUserId, search])
 
   // Admin create/assign (minimal wiring; technicians must be entered by ID)
   const [adminModalOpen, setAdminModalOpen] = useState(false)
@@ -188,17 +218,15 @@ export function TaskApp() {
       <div className="mx-auto flex min-h-0 w-full flex-1 flex-col px-3 md:px-6">
         <header className="flex shrink-0 flex-col gap-4 border-b border-slate-200 bg-white py-4 md:h-20 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">malambi</h1>
-            <p className="text-sm text-slate-500">Tasks & signed fiche workflow</p>
+            <h1 className="text-2xl font-semibold tracking-tight text-sky-700">Tableau de bord</h1>
+            <p className="text-sm text-slate-500">Tâches, fiches et validation</p>
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white/80 px-3 py-1.5 text-xs text-slate-700">
-              <span className="text-slate-600">Technician</span>
-              <span className="min-w-0 truncate font-medium text-slate-900">{displayName}</span>
-              <span className="text-slate-600">·</span>
-              <span className="text-slate-500">{profile?.role ?? '—'}</span>
-              {meQuery.isFetching ? <span className="text-slate-600">(sync…)</span> : null}
+                <span className="text-slate-600">{roleLabel}:</span>
+                <span className="min-w-0 truncate font-medium text-slate-900">{displayName}</span>
+                {meQuery.isFetching ? <span className="text-slate-600">(sync…)</span> : null}
             </div>
 
             <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-3">
@@ -211,13 +239,13 @@ export function TaskApp() {
                     setAdminModalOpen(true)
                   }}
                 >
-                  Admin: Create & Assign
+                  Create Task
                 </button>
               ) : null}
 
               <button
                 type="button"
-                className="min-h-10 rounded-md border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700 hover:bg-slate-50"
+                className="min-h-10 rounded-md bg-rose-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm hover:bg-rose-700"
                 onClick={() => {
                   clearAuth()
                   window.location.href = '/login'
@@ -238,41 +266,6 @@ export function TaskApp() {
               </p>
               <p className="mt-1 text-[11px] text-slate-500">My tasks are filtered by assignment.</p>
             </div>
-
-            <div>
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">Quick filters</p>
-              <div className="space-y-3">
-                <select
-                  className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-sky-600"
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter((e.target.value as TaskType | '') || '')}
-                >
-                  <option value="">All types</option>
-                  <option value="INSTALLATION">Installation</option>
-                  <option value="INTERVENTION">Intervention</option>
-                </select>
-
-                <select
-                  className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-sky-600"
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter((e.target.value as TaskStatus | '') || '')}
-                >
-                  <option value="">All statuses</option>
-                  <option value="CREATED">CREATED</option>
-                  <option value="ASSIGNED">ASSIGNED</option>
-                  <option value="IN_PROGRESS">IN_PROGRESS</option>
-                  <option value="COMPLETED">COMPLETED</option>
-                  <option value="VERIFIED">VERIFIED</option>
-                </select>
-
-                <input
-                  className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-sky-600"
-                  placeholder="Search title"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-            </div>
           </aside>
 
           <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
@@ -281,6 +274,13 @@ export function TaskApp() {
               loading={tasksQuery.isLoading}
               onSelectTask={(id) => setSelectedTaskId(id)}
               showTechnicians={isAdmin}
+              title={isAdmin ? 'All tasks' : 'My tasks'}
+              search={search}
+              onSearchChange={setSearch}
+              typeFilter={typeFilter}
+              onTypeFilterChange={(v) => setTypeFilter((v as TaskType | '') || '')}
+              statusFilter={statusFilter}
+              onStatusFilterChange={(v) => setStatusFilter((v as TaskStatus | '') || '')}
             />
           </div>
         </main>

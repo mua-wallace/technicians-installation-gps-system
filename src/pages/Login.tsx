@@ -12,8 +12,8 @@ function classNames(...parts: Array<string | false | undefined | null>) {
 function BrandMark() {
   return (
     <div className="flex items-center gap-3">
-      <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-500/15 ring-1 ring-emerald-500/35">
-        <svg className="h-5 w-5 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div className="grid h-10 w-10 place-items-center rounded-xl bg-sky-600/10 ring-1 ring-sky-600/25">
+        <svg className="h-5 w-5 text-sky-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -23,8 +23,8 @@ function BrandMark() {
         </svg>
       </div>
       <div className="leading-tight">
-        <p className="text-sm font-semibold text-slate-50">malambi</p>
-        <p className="text-xs text-slate-400">Technician Installation App</p>
+        <p className="text-sm font-semibold text-slate-900">malambi</p>
+        <p className="text-xs text-slate-500">Technician Installation App</p>
       </div>
     </div>
   )
@@ -77,80 +77,78 @@ export default function Login() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-50">
+    <div className="relative min-h-screen overflow-hidden bg-slate-100 text-slate-900">
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute inset-0 opacity-[0.22] [background-image:linear-gradient(to_right,rgba(148,163,184,0.12)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.10)_1px,transparent_1px)] [background-size:48px_48px]" />
-        <div className="absolute -top-56 left-1/2 h-[760px] w-[760px] -translate-x-1/2 rounded-full bg-emerald-500/16 blur-3xl" />
-        <div className="absolute -bottom-56 right-[-180px] h-[760px] w-[760px] rounded-full bg-sky-500/14 blur-3xl" />
-        <div className="absolute bottom-[-220px] left-[-220px] h-[680px] w-[680px] rounded-full bg-violet-500/12 blur-3xl" />
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/10 via-slate-950/40 to-slate-950" />
+        <div className="absolute inset-0 opacity-[0.28] [background-image:linear-gradient(to_right,rgba(148,163,184,0.25)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.18)_1px,transparent_1px)] [background-size:48px_48px]" />
+        <div className="absolute -top-56 left-1/2 h-[760px] w-[760px] -translate-x-1/2 rounded-full bg-sky-500/12 blur-3xl" />
+        <div className="absolute -bottom-56 right-[-180px] h-[760px] w-[760px] rounded-full bg-emerald-500/10 blur-3xl" />
       </div>
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-10">
         <div className="grid w-full grid-cols-1 gap-10 lg:grid-cols-2 lg:gap-14">
           <div className="hidden lg:flex lg:flex-col lg:justify-center">
             <BrandMark />
-            <h1 className="mt-8 text-4xl font-semibold tracking-tight text-slate-50">
+            <h1 className="mt-8 text-4xl font-semibold tracking-tight text-slate-900">
               Log in to start your next installation
             </h1>
-            <p className="mt-3 max-w-md text-sm leading-6 text-slate-300">
+            <p className="mt-3 max-w-md text-sm leading-6 text-slate-600">
               Fast access to your technician dashboard, intervention history, and forms—secured with token refresh.
             </p>
 
-            <div className="mt-8 grid max-w-md gap-3 rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
+            <div className="mt-8 grid max-w-md gap-3 rounded-2xl border border-slate-200 bg-white p-5">
               <div className="flex items-start gap-3">
-                <div className="mt-0.5 h-2 w-2 rounded-full bg-emerald-400" />
-                <p className="text-sm text-slate-300">
-                  Automatic token refresh on <span className="font-medium text-slate-100">401</span>
+                <div className="mt-0.5 h-2 w-2 rounded-full bg-emerald-500" />
+                <p className="text-sm text-slate-700">
+                  Automatic token refresh on <span className="font-medium text-slate-900">401</span>
                 </p>
               </div>
               <div className="flex items-start gap-3">
-                <div className="mt-0.5 h-2 w-2 rounded-full bg-sky-400" />
-                <p className="text-sm text-slate-300">Protected routes for the technician workspace</p>
+                <div className="mt-0.5 h-2 w-2 rounded-full bg-sky-500" />
+                <p className="text-sm text-slate-700">Protected routes for the technician workspace</p>
               </div>
               <div className="flex items-start gap-3">
-                <div className="mt-0.5 h-2 w-2 rounded-full bg-violet-400" />
-                <p className="text-sm text-slate-300">Lightweight state with Zustand</p>
+                <div className="mt-0.5 h-2 w-2 rounded-full bg-violet-500" />
+                <p className="text-sm text-slate-700">Lightweight state with Zustand</p>
               </div>
             </div>
           </div>
 
           <div className="flex items-center justify-center lg:justify-end">
-            <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950/60 p-6 shadow-2xl shadow-black/40">
+            <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex items-center justify-between gap-4">
                 <BrandMark />
-                <span className="rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                   Secure login
                 </span>
               </div>
 
-              <h2 className="mt-6 text-xl font-semibold text-slate-50">Welcome back</h2>
-              <p className="mt-1 text-sm text-slate-400">Enter your username and password to continue.</p>
+              <h2 className="mt-6 text-xl font-semibold text-slate-900">Welcome back</h2>
+              <p className="mt-1 text-sm text-slate-600">Enter your username and password to continue.</p>
               <p className="mt-2 text-xs text-slate-500">
-                Use your <span className="font-medium text-slate-300">Malambi</span> credentials to sign in.
+                Use your <span className="font-medium text-slate-700">Malambi</span> credentials to sign in.
               </p>
 
               {error ? (
-                <div className="mt-5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                <div className="mt-5 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                   {error}
                 </div>
               ) : null}
 
               <form className="mt-6 space-y-4" onSubmit={onSubmit}>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">Username</label>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">Username</label>
                   <input
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     disabled={loginMutation.isPending}
                     placeholder="e.g. technician01"
                     autoComplete="username"
-                    className="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 outline-none ring-emerald-500/30 focus:border-emerald-500/60 focus:ring-4 disabled:opacity-60"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none ring-sky-500/20 focus:border-sky-600 focus:ring-4 disabled:opacity-60"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">Password</label>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">Password</label>
                   <div className="relative">
                     <input
                       type={showPassword ? 'text' : 'password'}
@@ -159,11 +157,11 @@ export default function Login() {
                       disabled={loginMutation.isPending}
                       placeholder="••••••••"
                       autoComplete="current-password"
-                      className="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 pr-14 text-sm text-slate-100 placeholder:text-slate-500 outline-none ring-emerald-500/30 focus:border-emerald-500/60 focus:ring-4 disabled:opacity-60"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-14 text-sm text-slate-900 placeholder:text-slate-400 outline-none ring-sky-500/20 focus:border-sky-600 focus:ring-4 disabled:opacity-60"
                     />
                     <button
                       type="button"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-slate-100 disabled:pointer-events-none disabled:opacity-60"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:pointer-events-none disabled:opacity-60"
                       onClick={() => setShowPassword((s) => !s)}
                       disabled={loginMutation.isPending}
                     >
@@ -176,17 +174,17 @@ export default function Login() {
                   type="submit"
                   disabled={loginMutation.isPending || !isFormValid}
                   className={classNames(
-                    'w-full rounded-xl px-4 py-3 text-sm font-semibold text-slate-950 shadow-sm transition',
+                    'w-full rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-sm transition',
                     loginMutation.isPending || !isFormValid
-                      ? 'cursor-not-allowed bg-slate-700 text-slate-300'
-                      : 'bg-emerald-400 hover:bg-emerald-300',
+                      ? 'cursor-not-allowed bg-slate-300 text-slate-600'
+                      : 'bg-sky-600 hover:bg-sky-700',
                   )}
                 >
                   {loginMutation.isPending ? 'Logging in…' : 'Login'}
                 </button>
 
                 <p className="text-center text-xs text-slate-500">
-                  API: <span className="font-medium text-slate-300">{apiDisplayUrl}</span>
+                  API: <span className="font-medium text-slate-700">{apiDisplayUrl}</span>
                 </p>
               </form>
             </div>

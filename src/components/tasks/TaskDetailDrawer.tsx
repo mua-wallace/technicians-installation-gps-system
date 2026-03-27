@@ -6,6 +6,7 @@ import type { InterventionForm } from '../../store/useAppStore'
 import { usersApi } from '../../api/users'
 import type { ClientRow } from '../../api/users'
 import type { ClientVehicleRow } from '../../api/users'
+import { ConfirmDialog } from '../ui/ConfirmDialog'
 
 const DEFAULT_FORM: InterventionForm = {
   client: '',
@@ -69,16 +70,15 @@ function formatInputDate(dateValue: string | undefined | null) {
   return `${yyyy}-${mm}-${dd}`
 }
 
-function isoToDatetimeLocal(value?: string | null): string {
+function isoToDateInput(value?: string | null): string {
   if (!value) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
   const dt = new Date(value)
   if (Number.isNaN(dt.getTime())) return ''
   const yyyy = dt.getFullYear()
   const mm = String(dt.getMonth() + 1).padStart(2, '0')
   const dd = String(dt.getDate()).padStart(2, '0')
-  const hh = String(dt.getHours()).padStart(2, '0')
-  const min = String(dt.getMinutes()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}T${hh}:${min}`
+  return `${yyyy}-${mm}-${dd}`
 }
 
 function getLocalCurrentYearString(): string {
@@ -91,17 +91,6 @@ function getLocalTodayInputValue(): string {
   const mm = String(now.getMonth() + 1).padStart(2, '0')
   const dd = String(now.getDate()).padStart(2, '0')
   return `${yyyy}-${mm}-${dd}`
-}
-
-function datetimeLocalToIso(value: string): string | undefined {
-  if (!value) return undefined
-  const [datePart, timePart] = value.split('T')
-  if (!datePart || !timePart) return undefined
-  const [y, m, d] = datePart.split('-').map(Number)
-  const [hh, mm, ss = 0] = timePart.split(':').map(Number)
-  if (![y, m, d, hh, mm, ss].every(Number.isFinite)) return undefined
-  const local = new Date(y, m - 1, d, hh, mm, ss)
-  return Number.isNaN(local.getTime()) ? undefined : local.toISOString()
 }
 
 function getVehicleTagLabel(v: ClientVehicleRow): string {
@@ -175,6 +164,15 @@ export function TaskDetailDrawer({
   const [techSearch, setTechSearch] = useState('')
   const [reassignBusy, setReassignBusy] = useState(false)
   const [reassignError, setReassignError] = useState('')
+  const [startConfirmOpen, setStartConfirmOpen] = useState(false)
+  const [startAnchorRect, setStartAnchorRect] = useState<{
+    top: number
+    left: number
+    right: number
+    bottom: number
+    width: number
+    height: number
+  } | null>(null)
 
   const [clientSearch, setClientSearch] = useState('')
   const [clientDropdownOpen, setClientDropdownOpen] = useState(false)
@@ -190,6 +188,14 @@ export function TaskDetailDrawer({
   })
 
   const assignments: TaskAssignment[] = useMemo(() => taskQuery.data?.assignments ?? [], [taskQuery.data])
+  const assignedTechnicianNames = useMemo(() => {
+    if (!assignments.length) return '—'
+    const sorted = [...assignments].sort((a, b) => Number(b.isLead) - Number(a.isLead))
+    const names = sorted
+      .map((a) => a.technician?.fullname || a.technician?.username || (a.technicianId ? `#${a.technicianId}` : ''))
+      .filter(Boolean)
+    return names.length ? names.join(', ') : '—'
+  }, [assignments])
 
   const isTechnicianAssigned = useMemo(() => {
     if (!currentUserId) return false
@@ -208,7 +214,7 @@ export function TaskDetailDrawer({
     setTaskStatus(taskQuery.data.task?.status ?? 'ASSIGNED')
     setEditTitle(taskQuery.data.task?.title ?? '')
     setEditType(tType)
-    setEditScheduled(isoToDatetimeLocal(taskQuery.data.task?.scheduledDate))
+    setEditScheduled(isoToDateInput(taskQuery.data.task?.scheduledDate))
     setTaskSaveError('')
 
     const initialAssignments = taskQuery.data.assignments ?? []
@@ -244,7 +250,7 @@ export function TaskDetailDrawer({
     return {
       title: (t?.title ?? '').trim(),
       type: (t?.type ?? 'INSTALLATION') as TaskType,
-      scheduled: isoToDatetimeLocal(t?.scheduledDate),
+      scheduled: isoToDateInput(t?.scheduledDate),
     }
   }, [taskQuery.data?.task?.title, taskQuery.data?.task?.type, taskQuery.data?.task?.scheduledDate])
 
@@ -409,20 +415,26 @@ export function TaskDetailDrawer({
     const resp = await tasksApi.updateTaskStatus(taskId, next)
     setTaskStatus(resp?.task?.status ?? next)
     if (resp?.form?.ficheUrl) setFicheUrl(resp.form.ficheUrl ?? null)
+    onTaskUpdated?.(taskId)
   }
+
+  const startTypeLabel = taskType === 'INSTALLATION' ? 'Installation' : 'Intervention'
 
   const handleSaveTaskEdits = async () => {
     if (!taskQuery.data) return
     try {
       setTaskSaveError('')
       setSavingTask(true)
-      await tasksApi.updateTask(taskId, {
-        title: editTitle.trim(),
-        type: editType,
-        scheduledDate: datetimeLocalToIso(editScheduled),
-      })
+      const payload: Record<string, any> = {}
+      if (editTitle.trim() !== initialEdit.title) payload.title = editTitle.trim()
+      // Backend rejects `type` on PATCH /tasks/:id (it returns: "property type should not exist")
+      // so we intentionally never send it from the UI.
+      if (editScheduled !== initialEdit.scheduled) payload.scheduledDate = editScheduled || undefined
+
+      await tasksApi.updateTask(taskId, payload)
       await taskQuery.refetch()
       onTaskUpdated?.(taskId)
+      onClose()
     } catch (e: any) {
       const msg = e?.response?.data?.message ?? e?.response?.data?.error ?? e?.message ?? 'Failed to update task.'
       setTaskSaveError(Array.isArray(msg) ? msg.join(', ') : String(msg))
@@ -450,6 +462,7 @@ export function TaskDetailDrawer({
       await taskQuery.refetch()
       onTaskUpdated?.(taskId)
       setReassignOpen(false)
+      onClose()
     } catch (e: any) {
       const msg =
         e?.response?.data?.message ?? e?.response?.data?.error ?? e?.message ?? 'Failed to re-assign technicians.'
@@ -530,12 +543,10 @@ export function TaskDetailDrawer({
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white p-4">
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
                     Assigned technicians
                   </p>
-                  <p className="text-sm text-slate-900">
-                    {assignments.length} technician{assignments.length === 1 ? '' : 's'}
-                  </p>
+                  <p className="text-sm font-semibold text-slate-900">{assignedTechnicianNames}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-600">Actions</span>
@@ -558,17 +569,36 @@ export function TaskDetailDrawer({
                       {deletingTask ? 'Deleting…' : 'Delete task'}
                     </button>
                   ) : null}
-                  {isAdmin ? (
-                    <span className="text-xs text-slate-500">Admin</span>
-                  ) : null}
                   {canUpdateStatus ? (
                     <>
-                      {isAdmin ? (
+                      {isAdmin && taskStatus === 'ASSIGNED' ? (
                         <button
                           type="button"
-                          disabled={taskStatus !== 'COMPLETED'}
-                          className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none"
-                          onClick={() => handleUpdateStatus('VERIFIED')}
+                          className="rounded-md border border-amber-400/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-500/25"
+                          onClick={(e) => {
+                            const r = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
+                            setStartAnchorRect({
+                              top: r.top,
+                              left: r.left,
+                              right: r.right,
+                              bottom: r.bottom,
+                              width: r.width,
+                              height: r.height,
+                            })
+                            setStartConfirmOpen(true)
+                          }}
+                        >
+                          Start work
+                        </button>
+                      ) : null}
+                      {isAdmin && taskStatus === 'COMPLETED' ? (
+                        <button
+                          type="button"
+                          className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
+                          onClick={() => {
+                            handleUpdateStatus('VERIFIED')
+                            onClose()
+                          }}
                         >
                           Vérifier
                         </button>
@@ -578,6 +608,21 @@ export function TaskDetailDrawer({
                 </div>
                 {deleteError ? <p className="mt-2 text-xs text-rose-700">{deleteError}</p> : null}
               </div>
+
+              <ConfirmDialog
+                open={startConfirmOpen}
+                title={`Start this ${startTypeLabel}?`}
+                description={`By clicking OK, you confirm this ${startTypeLabel.toLowerCase()} is now in progress (status: IN_PROGRESS).`}
+                confirmLabel="OK"
+                cancelLabel="Annuler"
+                anchorRect={startAnchorRect}
+                onClose={() => setStartConfirmOpen(false)}
+                onConfirm={() => {
+                  setStartConfirmOpen(false)
+                  handleUpdateStatus('IN_PROGRESS')
+                  onClose()
+                }}
+              />
 
               {isFinalizedTask ? (
                 <div className="rounded-xl border border-slate-300 bg-white p-4">
@@ -756,10 +801,12 @@ export function TaskDetailDrawer({
                           className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
                           value={editType}
                           onChange={(e) => setEditType(e.target.value as TaskType)}
+                          disabled
                         >
                           <option value="INSTALLATION">INSTALLATION</option>
                           <option value="INTERVENTION">INTERVENTION</option>
                         </select>
+                        <p className="mt-1 text-[11px] text-slate-500">Le type ne peut pas être modifié.</p>
                       </div>
 
                       <div>
@@ -767,7 +814,7 @@ export function TaskDetailDrawer({
                           Scheduled date (optional)
                         </label>
                         <input
-                          type="datetime-local"
+                          type="date"
                           className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
                           value={editScheduled}
                           onChange={(e) => setEditScheduled(e.target.value)}
