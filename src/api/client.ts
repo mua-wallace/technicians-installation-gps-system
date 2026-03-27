@@ -2,8 +2,16 @@ import axios from 'axios'
 import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 
 function getApiBaseUrl(): string {
-  const url = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5400/api/v1/'
-  return String(url).replace(/\/+$/, '')
+  const envUrl = import.meta.env.VITE_API_BASE_URL
+
+  // In production (e.g. Vercel over HTTPS), never use an insecure absolute HTTP API URL
+  // from env because browsers block mixed-content requests and surface generic network errors.
+  if (import.meta.env.PROD && envUrl && /^http:\/\//i.test(envUrl)) {
+    return '/api/v1'
+  }
+
+  const fallback = import.meta.env.DEV ? 'http://localhost:5400/api/v1/' : '/api/v1/'
+  return String(envUrl || fallback).replace(/\/+$/, '')
 }
 
 const API_BASE_URL = getApiBaseUrl()
