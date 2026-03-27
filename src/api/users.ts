@@ -18,7 +18,10 @@ export type UserProfile = {
 export type ClientRow = {
   id: number
   accountId: number
-  name: string
+  name?: string | null
+  fullname?: string | null
+  company?: string | null
+  username?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -62,8 +65,18 @@ export const usersApi = {
       },
     })
 
-    const payload = resp.data as { data?: ClientRow[] } | { data: ClientRow[] }
-    return payload?.data ?? []
+    const payload = resp.data as any
+
+    // Handle common backend shapes:
+    // - []
+    // - { data: [] }
+    // - { rows: [] }
+    // - { data: { rows: [] } }
+    if (Array.isArray(payload)) return payload
+    if (Array.isArray(payload?.rows)) return payload.rows
+    if (Array.isArray(payload?.data)) return payload.data
+    if (Array.isArray(payload?.data?.rows)) return payload.data.rows
+    return []
   },
 
   listClientVehicles: async (

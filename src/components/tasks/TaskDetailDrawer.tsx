@@ -97,6 +97,10 @@ function getVehicleTagLabel(v: ClientVehicleRow): string {
   return String(v.tag ?? v.immatriculation ?? v.plateNumber ?? v.licensePlate ?? '').trim()
 }
 
+function getClientLabel(c: ClientRow): string {
+  return String(c.name ?? c.fullname ?? c.company ?? c.username ?? '').trim()
+}
+
 function getVehicleModelLabel(v: ClientVehicleRow): string {
   return String(v.model ?? v.vehicleModel ?? '').trim()
 }
@@ -148,9 +152,11 @@ export function TaskDetailDrawer({
   const [ficheUrl, setFicheUrl] = useState<string | null>(null)
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null)
+  /** Blob URL from API, or direct https URL (e.g. Cloudinary) for the signed fiche preview */
+  const [fichePreviewSrc, setFichePreviewSrc] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string>('')
   const [submitError, setSubmitError] = useState<string>('')
+  const [submittingForm, setSubmittingForm] = useState(false)
   const [deleteError, setDeleteError] = useState<string>('')
   const [deletingTask, setDeletingTask] = useState(false)
   const [editTitle, setEditTitle] = useState('')
@@ -293,9 +299,9 @@ export function TaskDetailDrawer({
 
   const filteredClients = useMemo(() => {
     const q = (clientSearch ?? '').trim().toLowerCase()
-    if (!q) return clientOptions.slice(0, 30)
+    if (!q) return clientOptions.filter((c) => getClientLabel(c)).slice(0, 30)
     return clientOptions
-      .filter((c) => (c.name ? String(c.name).toLowerCase().includes(q) : false))
+      .filter((c) => getClientLabel(c).toLowerCase().includes(q))
       .slice(0, 30)
   }, [clientOptions, clientSearch])
 
@@ -316,26 +322,41 @@ export function TaskDetailDrawer({
 
   useEffect(() => {
     if (!ficheUrl) {
-      setPreviewBlobUrl(null)
+      setFichePreviewSrc((prev) => {
+        if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev)
+        return null
+      })
       return
     }
 
     let cancelled = false
     setPreviewError('')
 
+    // Cloudinary and other CDNs: use the URL as-is (no blob fetch via our API).
+    const isHttpUrl = /^https?:\/\//i.test(ficheUrl.trim())
+    if (isHttpUrl) {
+      setFichePreviewSrc((prev) => {
+        if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev)
+        return ficheUrl.trim()
+      })
+      return () => {
+        cancelled = true
+      }
+    }
+
     tasksApi
       .fetchSignedFicheBlob(ficheUrl)
       .then((blob) => {
         if (cancelled) return
         const objectUrl = URL.createObjectURL(blob)
-        setPreviewBlobUrl((prev) => {
-          if (prev) URL.revokeObjectURL(prev)
+        setFichePreviewSrc((prev) => {
+          if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev)
           return objectUrl
         })
       })
       .catch((e) => {
         if (cancelled) return
-        setPreviewBlobUrl(null)
+        setFichePreviewSrc(null)
         setPreviewError(e?.message ?? 'Failed to load preview')
       })
 
@@ -353,21 +374,35 @@ export function TaskDetailDrawer({
   const handleSubmitForm = async () => {
     if (!taskQuery.data) return
     setSubmitError('')
-    const payload: Partial<InterventionForm> = sanitizeFormPayload({
-      ...form,
-      // Match DTO: date should be YYYY-MM-DD string.
-      date: formatInputDate(form.date),
-    })
-
     try {
+      setSubmittingForm(true)
+      let nextFicheUrl = ficheUrl
+      if (selectedFile) {
+        const uploadResp = await tasksApi.uploadSignedFiche(taskId, selectedFile, taskType)
+        nextFicheUrl = uploadResp?.ficheUrl ?? nextFicheUrl
+        setSelectedFile(null)
+      }
+
+      if (!nextFicheUrl) {
+        setSubmitError('Veuillez ajouter la fiche signée avant de mettre à jour.')
+        return
+      }
+
+      const payload: any = sanitizeFormPayload({
+        ...form,
+        // Match DTO: date should be YYYY-MM-DD string.
+        date: formatInputDate(form.date),
+      })
+      payload.ficheUrl = nextFicheUrl
+
       const resp =
         taskType === 'INSTALLATION'
           ? await tasksApi.submitInstallationForm(taskId, payload)
           : await tasksApi.submitInterventionForm(taskId, payload)
 
       const updatedForm = resp?.form
-      setFicheUrl(updatedForm?.ficheUrl ?? ficheUrl)
-      setStep(updatedForm?.ficheUrl ? 'SIGNED_FICHE' : 'SIGNED_FICHE')
+      setFicheUrl(updatedForm?.ficheUrl ?? nextFicheUrl ?? ficheUrl)
+      setStep('SIGNED_FICHE')
       const nextStatus = resp?.task?.status ?? taskStatus
 
       // Desired workflow: when a technician submits the form, the task should become COMPLETED.
@@ -390,15 +425,9 @@ export function TaskDetailDrawer({
         "Échec d'enregistrement de la fiche."
       const formatted = Array.isArray(backendMsg) ? backendMsg.join(', ') : String(backendMsg)
       setSubmitError(formatted)
+    } finally {
+      setSubmittingForm(false)
     }
-  }
-
-  const handleUpload = async () => {
-    if (!selectedFile) return
-    const resp = await tasksApi.uploadSignedFiche(taskId, selectedFile, taskType)
-    setFicheUrl(resp?.ficheUrl ?? null)
-    setSelectedFile(null)
-    setStep('SIGNED_FICHE')
   }
 
   const ficheExt = useMemo(() => {
@@ -1003,13 +1032,13 @@ export function TaskDetailDrawer({
                         <p className="text-sm text-slate-500">Aucune fiche signée.</p>
                       ) : previewError ? (
                         <p className="text-sm text-rose-700">{previewError}</p>
-                      ) : previewBlobUrl ? (
+                      ) : fichePreviewSrc ? (
                         <div className="mx-auto w-full max-w-[520px] rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
                           <div className="aspect-[210/297] w-full overflow-hidden rounded-md bg-white">
                             {ficheExt === 'pdf' ? (
-                              <iframe title="Signed fiche preview" src={previewBlobUrl} className="h-full w-full" />
+                              <iframe title="Signed fiche preview" src={fichePreviewSrc} className="h-full w-full" />
                             ) : (
-                              <img src={previewBlobUrl} alt="Signed fiche preview" className="h-full w-full object-contain" />
+                              <img src={fichePreviewSrc} alt="Signed fiche preview" className="h-full w-full object-contain" />
                             )}
                           </div>
                         </div>
@@ -1095,20 +1124,29 @@ export function TaskDetailDrawer({
                                 className="w-full px-3 py-2 text-left text-sm text-slate-900 hover:bg-slate-50"
                                 onMouseDown={(e) => e.preventDefault()}
                                 onClick={() => {
-                                  setForm((prev) => ({ ...prev, client: c.name }))
-                                  setClientSearch(c.name)
+                                  const clientLabel = getClientLabel(c)
+                                  setForm((prev) => ({ ...prev, client: clientLabel }))
+                                  setClientSearch(clientLabel)
                                   setClientTouched(true)
                                   setClientDropdownOpen(false)
                                   setSelectedClientId(c.id)
                                   setImmatSearch('')
                                   setImmatDropdownOpen(true)
                                   onFormChange('immatriculation', '' as any)
-                                  onFormChange('client', String(c.name ?? ''))
+                                  onFormChange('client', clientLabel as any)
                                 }}
                               >
-                                {String(c.name ?? '')}
+                                {getClientLabel(c)}
                               </button>
                             ))}
+                          </div>
+                        ) : clientDropdownOpen ? (
+                          <div className="absolute z-10 mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 shadow-sm">
+                            {clientsQuery.isLoading
+                              ? 'Chargement des clients…'
+                              : clientOptions.length === 0
+                                ? 'Aucun client disponible.'
+                                : 'Aucun résultat pour cette recherche.'}
                           </div>
                         ) : null}
                       </div>
@@ -1362,9 +1400,9 @@ export function TaskDetailDrawer({
                       type="button"
                       disabled={isBusy}
                       className="rounded-md bg-sky-600 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-60"
-                      onClick={handleSubmitForm}
+                      onClick={() => setStep('SIGNED_FICHE')}
                     >
-                      Enregistrer et continuer
+                      Next
                     </button>
                   </div>
                 </div>
@@ -1374,8 +1412,9 @@ export function TaskDetailDrawer({
                 <div className="rounded-xl border border-slate-300 bg-slate-100 p-4 text-slate-900">
                   <h3 className="text-sm font-semibold text-sky-900">Fiche signée</h3>
                   <p className="mt-1 text-xs text-slate-600">
-                    Chargez la photo ou le PDF signé séparément.
+                    Étape 2/2: Ajoutez la fiche signée (obligatoire), puis cliquez sur Update.
                   </p>
+                  {submitError ? <p className="mt-2 text-xs text-rose-700">{submitError}</p> : null}
 
                   <div className="mt-4 grid gap-4 lg:grid-cols-2">
                     <div className="space-y-3 rounded-xl border border-slate-300 bg-white p-4">
@@ -1394,11 +1433,11 @@ export function TaskDetailDrawer({
                       <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
-                          disabled={!selectedFile}
+                          disabled={submittingForm || (!selectedFile && !ficheUrl)}
                           className="rounded-md bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
-                          onClick={handleUpload}
+                          onClick={handleSubmitForm}
                         >
-                          Charger la fiche signée
+                          {submittingForm ? 'Updating…' : 'Update'}
                         </button>
                         {ficheUrl ? (
                           <button
@@ -1420,11 +1459,11 @@ export function TaskDetailDrawer({
                         <p className="text-sm text-slate-500">Aucune fiche signée chargée.</p>
                       ) : previewError ? (
                         <p className="text-sm text-rose-300">{previewError}</p>
-                      ) : previewBlobUrl ? (
+                      ) : fichePreviewSrc ? (
                         ficheExt === 'pdf' ? (
-                          <iframe title="Signed fiche preview" src={previewBlobUrl} className="h-80 w-full rounded-md" />
+                          <iframe title="Signed fiche preview" src={fichePreviewSrc} className="h-80 w-full rounded-md" />
                         ) : (
-                          <img src={previewBlobUrl} alt="Signed fiche preview" className="max-h-80 w-full rounded-md object-contain" />
+                          <img src={fichePreviewSrc} alt="Signed fiche preview" className="max-h-80 w-full rounded-md object-contain" />
                         )
                       ) : (
                         <p className="text-sm text-slate-500">Chargement de l'aperçu…</p>
