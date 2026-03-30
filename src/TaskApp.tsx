@@ -95,25 +95,34 @@ export function TaskApp() {
         : tasks.filter((t) => t.assignments?.some((a) => a.technicianId === myUserId))
 
     const q = search.trim().toLowerCase()
-    if (!q) return scoped
+    const filtered = !q
+      ? scoped
+      : scoped.filter((t) => {
+          const scheduled = t.scheduledDate ? new Date(t.scheduledDate).toLocaleDateString() : ''
+          const technicians =
+            (t.assignments ?? [])
+              .map((a) => a.technician?.fullname || a.technician?.username || String(a.technicianId ?? ''))
+              .filter(Boolean)
+              .join(' ') ?? ''
+          const haystack = [
+            t.title ?? '',
+            t.type ?? '',
+            t.status ?? '',
+            scheduled,
+            technicians,
+          ]
+            .join(' ')
+            .toLowerCase()
+          return haystack.includes(q)
+        })
 
-    return scoped.filter((t) => {
-      const scheduled = t.scheduledDate ? new Date(t.scheduledDate).toLocaleDateString() : ''
-      const technicians =
-        (t.assignments ?? [])
-          .map((a) => a.technician?.fullname || a.technician?.username || String(a.technicianId ?? ''))
-          .filter(Boolean)
-          .join(' ') ?? ''
-      const haystack = [
-        t.title ?? '',
-        t.type ?? '',
-        t.status ?? '',
-        scheduled,
-        technicians,
-      ]
-        .join(' ')
-        .toLowerCase()
-      return haystack.includes(q)
+    // Latest first (fallback order: updatedAt -> createdAt -> scheduledDate)
+    return [...filtered].sort((a, b) => {
+      const aKey = a.updatedAt || a.createdAt || a.scheduledDate || ''
+      const bKey = b.updatedAt || b.createdAt || b.scheduledDate || ''
+      const aMs = aKey ? new Date(aKey).getTime() : 0
+      const bMs = bKey ? new Date(bKey).getTime() : 0
+      return bMs - aMs
     })
   }, [tasksQuery.data, isAdmin, myUserId, search])
 
@@ -218,7 +227,8 @@ export function TaskApp() {
       <div className="mx-auto flex min-h-0 w-full flex-1 flex-col px-3 md:px-6">
         <header className="flex shrink-0 flex-col gap-4 border-b border-slate-200 bg-white py-4 md:h-20 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
-            <h1 className="text-2xl font-semibold tracking-tight text-sky-700">Tableau de bord</h1>
+            <p className="text-xs font-semibold uppercase tracking-wider text-sky-600">Malambi</p>
+            <h1 className="mt-0.5 text-2xl font-semibold tracking-tight text-sky-700">Tableau de bord</h1>
             <p className="text-sm text-slate-500">Tâches, fiches et validation</p>
           </div>
 
