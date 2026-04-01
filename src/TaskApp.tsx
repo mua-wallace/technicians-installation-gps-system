@@ -338,7 +338,6 @@ export function TaskApp() {
               tasks={tasksForUI}
               loading={tasksQuery.isLoading}
               onSelectTask={(id) => setSelectedTaskId(id)}
-              showTechnicians={isAdmin}
               title={isAdmin ? 'All tasks' : 'My tasks'}
               search={search}
               onSearchChange={setSearch}

@@ -23,7 +23,6 @@ type Props = {
   tasks: TaskListItem[]
   loading?: boolean
   onSelectTask: (taskId: string) => void
-  showTechnicians?: boolean
   title?: string
   search: string
   onSearchChange: (next: string) => void
@@ -37,7 +36,6 @@ export function TaskList({
   tasks,
   loading,
   onSelectTask,
-  showTechnicians,
   title = 'My tasks',
   search,
   onSearchChange,
@@ -58,7 +56,7 @@ export function TaskList({
       <div className="mb-3 grid gap-2 sm:grid-cols-3">
         <input
           className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-600"
-          placeholder="Search client / equipment / technicians"
+          placeholder="Search client / technicians"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
         />
@@ -89,35 +87,27 @@ export function TaskList({
 
       <div className="min-h-0 flex-1 overflow-auto">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse text-xs text-slate-700">
+          <table className="w-full min-w-[840px] border-collapse text-xs text-slate-700">
             <thead>
               <tr className="bg-slate-50 text-left uppercase tracking-wide text-[11px] text-slate-500">
-                <th className="border-b border-slate-200 px-3 py-2">Client</th>
-                <th className="border-b border-slate-200 px-3 py-2">Equipment</th>
-                <th className="border-b border-slate-200 px-3 py-2">Type</th>
-                <th className="border-b border-slate-200 px-3 py-2">Scheduled</th>
-                {showTechnicians ? (
-                  <th className="border-b border-slate-200 px-3 py-2">Techniciens</th>
-                ) : null}
-                <th className="border-b border-slate-200 px-3 py-2">Status</th>
+                <th className="border-b border-slate-200 px-3 py-2 text-center">Client</th>
+                <th className="border-b border-slate-200 px-3 py-2 text-center">Type</th>
+                <th className="border-b border-slate-200 px-3 py-2 text-center">Technicians</th>
+                <th className="border-b border-slate-200 px-3 py-2 text-center whitespace-normal break-words leading-tight max-w-40">
+                  No of Instal/Interventions
+                </th>
+                <th className="border-b border-slate-200 px-3 py-2 text-center">Schedule</th>
+                <th className="border-b border-slate-200 px-3 py-2 text-center">Status</th>
                 <th className="w-0 border-b border-slate-200 py-2 pl-1 pr-2 text-right">Details</th>
               </tr>
             </thead>
             <tbody>
               {tasks.map((task) => (
                 <tr key={task.id} className="bg-white">
-                  <td className="border-b border-slate-200 px-3 py-2">
+                  <td className="border-b border-slate-200 px-3 py-2 text-center">
                     <div className="font-medium text-slate-900">{task.client || '—'}</div>
                   </td>
-                  <td className="border-b border-slate-200 px-3 py-2 text-slate-700">
-                    <div className="font-medium text-slate-900">
-                      {[task.equipmentMake, task.equipmentModel].filter(Boolean).join(' ') || '—'}
-                    </div>
-                    <div className="text-[11px] text-slate-500">
-                      {[task.typeEquipment, task.equipmentVersion].filter(Boolean).join(' · ') || ''}
-                    </div>
-                  </td>
-                  <td className="border-b border-slate-200 px-3 py-2">
+                  <td className="border-b border-slate-200 px-3 py-2 text-center">
                     {task.type === 'INSTALLATION' ? (
                       <Pill className="bg-violet-500/15 text-violet-700 ring-1 ring-violet-500/30">
                         INSTALLATION
@@ -128,15 +118,18 @@ export function TaskList({
                       </Pill>
                     )}
                   </td>
-                  <td className="border-b border-slate-200 px-3 py-2 text-slate-600">
+                  <td className="border-b border-slate-200 px-3 py-2 text-center text-slate-700">
+                    <span className="mx-auto block line-clamp-2 max-w-[260px]">{getTechnicianDisplayName(task)}</span>
+                  </td>
+                  <td className="border-b border-slate-200 px-3 py-2 text-center text-slate-700">
+                    <span className="font-medium text-slate-900">
+                      {Number.isFinite(task.numberOfInstallations as any) ? String(task.numberOfInstallations) : '—'}
+                    </span>
+                  </td>
+                  <td className="border-b border-slate-200 px-3 py-2 text-center text-slate-600">
                     {task.scheduledDate ? new Date(task.scheduledDate).toLocaleDateString() : '—'}
                   </td>
-                  {showTechnicians ? (
-                    <td className="border-b border-slate-200 px-3 py-2 text-slate-700">
-                      <span className="line-clamp-2">{getTechnicianDisplayName(task)}</span>
-                    </td>
-                  ) : null}
-                  <td className="border-b border-slate-200 px-3 py-2">
+                  <td className="border-b border-slate-200 px-3 py-2 text-center">
                     <Pill
                       className={
                         task.status === 'COMPLETED'
@@ -181,7 +174,7 @@ export function TaskList({
               {tasks.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={showTechnicians ? 7 : 6}
+                    colSpan={7}
                     className="border-b border-slate-200 px-3 py-8 text-center text-sm text-slate-500"
                   >
                     No tasks found.

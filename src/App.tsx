@@ -658,7 +658,7 @@ export function App() {
                     Checklist
                   </h4>
                   <div className="grid gap-2 text-sm sm:grid-cols-2">
-                    <CheckRow label="Batterie 12V OK" checked={detailsRow.battery12vOk} />
+                    <CheckRow label="Batterie OK" checked={detailsRow.battery12vOk} />
                     <CheckRow label="Kit GPS connecté" checked={detailsRow.kitGpsConnected} />
                     <CheckRow label="Moteur démarre bien" checked={detailsRow.engineStartsWell} />
                     <CheckRow label="Dashboard défauts" checked={detailsRow.dashboardDefaults} />
@@ -1070,7 +1070,7 @@ export function App() {
                           checked={currentForm.battery12vOk}
                           onChange={(e) => updateFormField('battery12vOk', e.target.checked)}
                         />
-                        <span>Batterie 12V OK</span>
+                        <span>Batterie OK</span>
                       </label>
                       <label className="flex items-center gap-2">
                         <input

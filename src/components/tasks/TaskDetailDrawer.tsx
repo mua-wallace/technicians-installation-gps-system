@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { TaskAssignment, TaskFormRow, TaskStatus, TaskType } from '../../api/tasks'
-import { tasksApi } from '../../api/tasks'
+import { tasksApi, type InstallationFormSubmitPayload } from '../../api/tasks'
 import type { InterventionForm } from '../../store/useAppStore'
 import { usersApi } from '../../api/users'
 import type { ClientRow } from '../../api/users'
@@ -68,6 +68,17 @@ function formatInputDate(dateValue: string | undefined | null) {
   const mm = String(d.getUTCMonth() + 1).padStart(2, '0')
   const dd = String(d.getUTCDate()).padStart(2, '0')
   return `${yyyy}-${mm}-${dd}`
+}
+
+function dateInputToIso(value: string | undefined | null): string {
+  if (!value) return new Date().toISOString()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split('-').map((n) => Number(n))
+    const dt = new Date(y, (m ?? 1) - 1, d ?? 1, 0, 0, 0, 0)
+    return Number.isNaN(dt.getTime()) ? new Date().toISOString() : dt.toISOString()
+  }
+  const dt = new Date(value)
+  return Number.isNaN(dt.getTime()) ? new Date().toISOString() : dt.toISOString()
 }
 
 function isoToDatetimeLocalInput(value?: string | null): string {
@@ -171,6 +182,8 @@ export function TaskDetailDrawer({
   /** Blob URL from API, or direct https URL (e.g. Cloudinary) for the signed fiche preview */
   const [fichePreviewSrc, setFichePreviewSrc] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string>('')
+  const [localFilePreviewSrc, setLocalFilePreviewSrc] = useState<string | null>(null)
+  const [fullPreviewOpen, setFullPreviewOpen] = useState(false)
   const [submitError, setSubmitError] = useState<string>('')
   const [submittingForm, setSubmittingForm] = useState(false)
   const [deleteError, setDeleteError] = useState<string>('')
@@ -205,12 +218,11 @@ export function TaskDetailDrawer({
     height: number
   } | null>(null)
 
-  const [clientSearch, setClientSearch] = useState('')
-  const [clientDropdownOpen, setClientDropdownOpen] = useState(false)
-  const [clientTouched, setClientTouched] = useState(false)
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null)
   const [immatSearch, setImmatSearch] = useState('')
   const [immatDropdownOpen, setImmatDropdownOpen] = useState(false)
+  const [vehicleManualMode, setVehicleManualMode] = useState(false)
+  const signedFicheInputId = useId()
 
   const taskQuery = useQuery({
     queryKey: ['task', taskId],
@@ -219,6 +231,7 @@ export function TaskDetailDrawer({
   })
 
   const assignments: TaskAssignment[] = useMemo(() => taskQuery.data?.assignments ?? [], [taskQuery.data])
+  const hasExistingFiche = Boolean(taskQuery.data?.form?.ficheUrl || ficheUrl)
   const assignedTechnicianNames = useMemo(() => {
     if (!assignments.length) return '—'
     const sorted = [...assignments].sort((a, b) => Number(b.isLead) - Number(a.isLead))
@@ -269,15 +282,15 @@ export function TaskDetailDrawer({
     const nextForm = { ...DEFAULT_FORM, ...(backendForm ?? {}) } as InterventionForm
     // Ensure `date` is compatible with `<input type="date">`
     nextForm.date = formatInputDate(nextForm.date)
+    if (!nextForm.client) nextForm.client = taskQuery.data.task?.client ?? ''
     if (!nextForm.year) nextForm.year = getLocalCurrentYearString()
     if (!nextForm.date) nextForm.date = getLocalTodayInputValue()
     if (!nextForm.installerName) nextForm.installerName = installerDefaultName
     setForm(nextForm)
-    setClientSearch(nextForm.client ?? '')
-    setClientTouched(false)
     setSelectedClientId(null)
     setImmatSearch(nextForm.immatriculation ?? '')
     setImmatDropdownOpen(false)
+    setVehicleManualMode(false)
 
     setFicheUrl(backendForm?.ficheUrl ?? null)
     setStep(backendForm?.ficheUrl ? 'SIGNED_FICHE' : 'FORM')
@@ -360,13 +373,20 @@ export function TaskDetailDrawer({
 
   const clientOptions: ClientRow[] = clientsQuery.data ?? []
 
-  const filteredClients = useMemo(() => {
-    const q = (clientSearch ?? '').trim().toLowerCase()
-    if (!q) return clientOptions.filter((c) => getClientLabel(c)).slice(0, 30)
-    return clientOptions
-      .filter((c) => getClientLabel(c).toLowerCase().includes(q))
-      .slice(0, 30)
-  }, [clientOptions, clientSearch])
+  // Technician UX: client must come from the task and cannot be changed.
+  // We still need a clientId to load vehicles, so we resolve it from the clients list when possible.
+  useEffect(() => {
+    if (isAdmin) return
+    if (!open || step !== 'FORM') return
+    if (selectedClientId) return
+    const label = String(taskQuery.data?.task?.client ?? form.client ?? '').trim()
+    if (!label) return
+    const match =
+      clientOptions.find((c) => getClientLabel(c).trim().toLowerCase() === label.toLowerCase()) ??
+      clientOptions.find((c) => getClientLabel(c).trim().toLowerCase().includes(label.toLowerCase()))
+    if (!match) return
+    setSelectedClientId(match.id)
+  }, [isAdmin, open, step, selectedClientId, taskQuery.data?.task?.client, form.client, clientOptions])
 
   const filteredEditClients = useMemo(() => {
     const q = (editClientSearch ?? '').trim().toLowerCase()
@@ -435,6 +455,19 @@ export function TaskDetailDrawer({
     }
   }, [ficheUrl])
 
+  useEffect(() => {
+    setLocalFilePreviewSrc((prev) => {
+      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev)
+      return null
+    })
+    if (!selectedFile) return
+    const objectUrl = URL.createObjectURL(selectedFile)
+    setLocalFilePreviewSrc(objectUrl)
+    return () => {
+      URL.revokeObjectURL(objectUrl)
+    }
+  }, [selectedFile])
+
   const isBusy = taskQuery.isFetching
 
   const onFormChange = <K extends keyof InterventionForm>(key: K, value: InterventionForm[K]) => {
@@ -454,39 +487,39 @@ export function TaskDetailDrawer({
       }
 
       if (!nextFicheUrl) {
-        setSubmitError('Veuillez ajouter la fiche signée avant de mettre à jour.')
+        setSubmitError('Veuillez ajouter la fiche signée avant de créer la fiche.')
         return
       }
 
       const payload: any = sanitizeFormPayload({
         ...form,
-        // Match DTO: date should be YYYY-MM-DD string.
+        // keep user input in state; we convert to ISO for API below.
         date: formatInputDate(form.date),
       })
-      payload.ficheUrl = nextFicheUrl
+      const submitPayload: InstallationFormSubmitPayload = {
+        ...(payload as InterventionForm),
+        client: taskQuery.data?.task?.client ?? form.client ?? '',
+        date: dateInputToIso(form.date),
+        ficheUrl: nextFicheUrl,
+      }
 
-      const resp =
-        taskType === 'INSTALLATION'
-          ? await tasksApi.submitInstallationForm(taskId, payload)
-          : await tasksApi.submitInterventionForm(taskId, payload)
+      const effectiveType = (taskQuery.data?.task?.type ?? taskType) as TaskType
+      const resp = hasExistingFiche
+        ? effectiveType === 'INTERVENTION'
+          ? await tasksApi.updateInterventionForm(taskId, submitPayload)
+          : await tasksApi.updateInstallationForm(taskId, submitPayload)
+        : effectiveType === 'INTERVENTION'
+          ? await tasksApi.submitInterventionForm(taskId, submitPayload)
+          : await tasksApi.submitInstallationForm(taskId, submitPayload)
 
       const updatedForm = resp?.form
       setFicheUrl(updatedForm?.ficheUrl ?? nextFicheUrl ?? ficheUrl)
       setStep('SIGNED_FICHE')
       const nextStatus = resp?.task?.status ?? taskStatus
-
-      // Desired workflow: when a technician submits the form, the task should become COMPLETED.
-      if (!isAdmin && isTechnicianAssigned) {
-        try {
-          await tasksApi.updateTaskStatus(taskId, 'COMPLETED')
-          setTaskStatus('COMPLETED')
-        } catch {
-          // If backend already updates status (or rejects), fallback to response status.
-          setTaskStatus(nextStatus)
-        }
-      } else {
-        setTaskStatus(nextStatus)
-      }
+      // Backend handles status updates as part of form creation/submission.
+      setTaskStatus(nextStatus)
+      onTaskUpdated?.(taskId)
+      onClose()
     } catch (e: any) {
       const backendMsg =
         e?.response?.data?.message ??
@@ -611,6 +644,11 @@ export function TaskDetailDrawer({
               <span className="rounded-full border border-slate-300 bg-white px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-900">
                 {taskQuery.data?.task?.client ?? 'Task'}
               </span>
+              <span className="rounded-full border border-slate-300 bg-white px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-900">
+                {Number.isFinite(taskQuery.data?.task?.numberOfInstallations as any)
+                  ? `${taskQuery.data?.task?.numberOfInstallations} install${taskQuery.data?.task?.numberOfInstallations === 1 ? '' : 's'}`
+                  : '— installs'}
+              </span>
               <span className="rounded-full bg-slate-300/70 px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-900">
                 {taskType}
               </span>
@@ -618,9 +656,47 @@ export function TaskDetailDrawer({
                 {taskStatus}
               </span>
             </div>
-            <p className="mt-1 text-xs text-slate-600">
-              Step {step === 'FORM' ? '1/2' : '2/2'}: {step === 'FORM' ? 'Fill the correct form' : 'Upload signed fiche'}
-            </p>
+            {!isAdmin ? (
+              <div className="mt-3 flex max-w-md items-center gap-2">
+                <div
+                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg border px-2 py-1.5 text-[11px] font-medium ${
+                    step === 'FORM'
+                      ? 'border-sky-500 bg-sky-50 text-sky-900'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  }`}
+                >
+                  <span
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                      step === 'FORM' ? 'bg-sky-600 text-white' : 'bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    1
+                  </span>
+                  <span className="truncate">Fiche</span>
+                </div>
+                <div className="h-px w-6 shrink-0 bg-slate-300" aria-hidden />
+                <div
+                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg border px-2 py-1.5 text-[11px] font-medium ${
+                    step === 'SIGNED_FICHE'
+                      ? 'border-sky-500 bg-sky-50 text-sky-900'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  }`}
+                >
+                  <span
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                      step === 'SIGNED_FICHE' ? 'bg-sky-600 text-white' : 'bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    2
+                  </span>
+                  <span className="truncate">Fiche signée</span>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-1 text-xs text-slate-600">
+                Step {step === 'FORM' ? '1/2' : '2/2'}: {step === 'FORM' ? 'Fill the correct form' : 'Upload signed fiche'}
+              </p>
+            )}
           </div>
           <button
             type="button"
@@ -1248,7 +1324,7 @@ export function TaskDetailDrawer({
                         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
                           {(
                             [
-                              ['battery12vOk', 'Batterie 12V OK'],
+                              ['battery12vOk', 'Batterie OK'],
                               ['kitGpsConnected', 'Kit GPS connecté'],
                               ['engineStartsWell', 'Moteur démarre bien'],
                               ['dashboardDefaults', 'Défauts tableau de bord'],
@@ -1329,11 +1405,11 @@ export function TaskDetailDrawer({
 
               {!isAdmin && step === 'FORM' && (
                 <div className="rounded-xl border border-slate-300 bg-slate-100 p-4 text-slate-900">
-                  <h3 className="text-sm font-semibold text-sky-900">
+                  <h3 className="text-base font-semibold text-sky-900">
                     {taskType === 'INSTALLATION' ? "Fiche d'installation" : "Fiche d'intervention"}
                   </h3>
-                  <p className="mt-1 text-xs text-slate-600">
-                    Remplissez et enregistrez la fiche, puis chargez la fiche signée à l'étape suivante.
+                  <p className="mt-1 text-sm leading-relaxed text-slate-600">
+                    Renseignez les champs ci-dessous, puis appuyez sur <span className="font-medium text-slate-800">Continuer</span> pour joindre la fiche signée et finaliser.
                   </p>
                   {submitError ? <p className="mt-2 text-xs text-rose-700">{submitError}</p> : null}
 
@@ -1344,87 +1420,35 @@ export function TaskDetailDrawer({
                         <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
                           Client
                         </label>
-                        <input
-                          className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
-                          value={clientTouched ? clientSearch : form.client ?? ''}
-                          onChange={(e) => {
-                            setClientSearch(e.target.value)
-                            setClientTouched(true)
-                            setClientDropdownOpen(true)
-                            setSelectedClientId(null)
-                            setImmatSearch('')
-                            setImmatDropdownOpen(false)
-                            onFormChange('immatriculation', '' as any)
-                            onFormChange('client', e.target.value)
-                          }}
-                          onFocus={() => {
-                            setClientDropdownOpen(true)
-                            setClientTouched(true)
-                            if (!clientSearch) setClientSearch(form.client ?? '')
-                          }}
-                          onBlur={() => {
-                            // keep option click workable
-                            setTimeout(() => setClientDropdownOpen(false), 120)
-                          }}
-                          placeholder="Rechercher un client…"
-                        />
+                        <div className="mt-1 flex items-stretch gap-2">
+                          <input
+                            className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none"
+                            value={form.client ?? ''}
+                            readOnly
+                            disabled
+                          />
+                          <button
+                            type="button"
+                            className="rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                            disabled={!selectedClientId || vehiclesQuery.isLoading}
+                            title="Refresh vehicles"
+                            onClick={() => {
+                              setVehicleManualMode(false)
+                              vehiclesQuery.refetch()
+                            }}
+                          >
+                            {vehiclesQuery.isLoading ? '…' : 'Refresh'}
+                          </button>
+                        </div>
                         {form.client ? (
                           <div className="mt-1 flex items-center justify-between gap-2 text-xs">
                             <span className="text-slate-600">
                               Client sélectionné: <span className="font-medium text-slate-800">{form.client}</span>
                             </span>
-                            <button
-                              type="button"
-                              className="rounded border border-slate-200 bg-white px-2 py-0.5 text-slate-600 hover:bg-slate-50"
-                              onClick={() => {
-                                setForm((prev) => ({ ...prev, client: '' }))
-                                setClientSearch('')
-                                setClientTouched(false)
-                                setClientDropdownOpen(false)
-                                setSelectedClientId(null)
-                                setImmatSearch('')
-                                setImmatDropdownOpen(false)
-                                onFormChange('client', '' as any)
-                                onFormChange('immatriculation', '' as any)
-                              }}
-                            >
-                              Changer
-                            </button>
                           </div>
                         ) : null}
-                        {clientDropdownOpen && filteredClients.length > 0 ? (
-                          <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-slate-200 bg-white shadow-sm">
-                            {filteredClients.map((c) => (
-                              <button
-                                key={c.id}
-                                type="button"
-                                className="w-full px-3 py-2 text-left text-sm text-slate-900 hover:bg-slate-50"
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => {
-                                  const clientLabel = getClientLabel(c)
-                                  setForm((prev) => ({ ...prev, client: clientLabel }))
-                                  setClientSearch(clientLabel)
-                                  setClientTouched(true)
-                                  setClientDropdownOpen(false)
-                                  setSelectedClientId(c.id)
-                                  setImmatSearch('')
-                                  setImmatDropdownOpen(true)
-                                  onFormChange('immatriculation', '' as any)
-                                  onFormChange('client', clientLabel as any)
-                                }}
-                              >
-                                {getClientLabel(c)}
-                              </button>
-                            ))}
-                          </div>
-                        ) : clientDropdownOpen ? (
-                          <div className="absolute z-10 mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 shadow-sm">
-                            {clientsQuery.isLoading
-                              ? 'Chargement des clients…'
-                              : clientOptions.length === 0
-                                ? 'Aucun client disponible.'
-                                : 'Aucun résultat pour cette recherche.'}
-                          </div>
+                        {!selectedClientId && clientsQuery.isLoading ? (
+                          <p className="mt-1 text-[11px] text-slate-500">Loading client vehicles…</p>
                         ) : null}
                       </div>
 
@@ -1477,33 +1501,81 @@ export function TaskDetailDrawer({
                         <input
                           className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
                           value={immatSearch || form.immatriculation || ''}
-                          disabled={!selectedClientId}
+                          disabled={!selectedClientId && !vehicleManualMode && !isAdmin}
                           onChange={(e) => {
                             setImmatSearch(e.target.value)
-                            setImmatDropdownOpen(true)
+                            if (!vehicleManualMode && vehicleOptions.length > 0) setImmatDropdownOpen(true)
                             onFormChange('immatriculation', e.target.value)
                           }}
                           onFocus={() => {
-                            setImmatDropdownOpen(true)
+                            if (!vehicleManualMode && vehicleOptions.length > 0) setImmatDropdownOpen(true)
                             if (!immatSearch) setImmatSearch(form.immatriculation ?? '')
                           }}
                           onBlur={() => {
                             setTimeout(() => setImmatDropdownOpen(false), 120)
                           }}
-                          placeholder={selectedClientId ? 'Rechercher un tag véhicule' : 'Sélectionnez d’abord un client'}
+                          placeholder={
+                            selectedClientId
+                              ? vehicleManualMode
+                                ? 'Saisir manuellement (immat / tag)'
+                                : 'Rechercher un tag véhicule'
+                              : vehicleManualMode
+                                ? 'Saisir manuellement (immat / tag)'
+                                : isAdmin
+                                  ? 'Sélectionnez d’abord un client'
+                                  : 'Entrer immatriculation / tag'
+                          }
                         />
                         {selectedClientId && vehicleOptions.length > 0 ? (
                           <p className="mt-1 text-xs text-slate-500">{vehicleOptions.length} véhicule(s) trouvé(s)</p>
                         ) : null}
-                        {!selectedClientId ? (
-                          <p className="mt-1 text-xs text-amber-700">Sélectionnez d’abord un client.</p>
+                        {!selectedClientId && !vehicleManualMode ? (
+                          <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs">
+                            <p className="text-amber-700">
+                              {isAdmin ? "Sélectionnez d’abord un client." : "Impossible de charger les véhicules pour ce client."}
+                            </p>
+                            {!isAdmin ? (
+                              <label className="flex items-center gap-2 rounded border border-slate-200 bg-white px-2 py-0.5 font-semibold text-slate-700">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 border-slate-300 text-sky-700 focus:ring-sky-500"
+                                  checked={vehicleManualMode}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked
+                                    setVehicleManualMode(checked)
+                                    if (checked) setImmatDropdownOpen(false)
+                                  }}
+                                />
+                                Enter manually
+                              </label>
+                            ) : null}
+                          </div>
                         ) : vehiclesQuery.isLoading ? (
                           <p className="mt-1 text-xs text-slate-500">Chargement des véhicules…</p>
                         ) : vehicleOptions.length === 0 ? (
-                          <p className="mt-1 text-xs text-rose-700">Aucun véhicule dans ce compte/client.</p>
+                          vehicleManualMode ? (
+                            <p className="mt-1 text-xs text-slate-500">Manual entry enabled.</p>
+                          ) : (
+                            <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs">
+                              <p className="text-rose-700">Aucun véhicule dans ce compte/client.</p>
+                              <label className="flex items-center gap-2 rounded border border-slate-200 bg-white px-2 py-0.5 font-semibold text-slate-700">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 border-slate-300 text-sky-700 focus:ring-sky-500"
+                                  checked={vehicleManualMode}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked
+                                    setVehicleManualMode(checked)
+                                    if (checked) setImmatDropdownOpen(false)
+                                  }}
+                                />
+                                Enter manually
+                              </label>
+                            </div>
+                          )
                         ) : null}
 
-                        {immatDropdownOpen && filteredVehicles.length > 0 ? (
+                        {immatDropdownOpen && !vehicleManualMode && filteredVehicles.length > 0 ? (
                           <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-slate-200 bg-white shadow-sm">
                             {filteredVehicles.map((v, idx) => {
                               const label = getVehicleTagLabel(v)
@@ -1589,7 +1661,7 @@ export function TaskDetailDrawer({
                         <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
                           {(
                             [
-                              ['battery12vOk', 'Batterie 12V OK'],
+                              ['battery12vOk', 'Batterie OK'],
                               ['kitGpsConnected', 'Kit GPS connecté'],
                               ['engineStartsWell', 'Moteur démarre bien'],
                               ['dashboardDefaults', 'Dashboard défauts'],
@@ -1613,139 +1685,274 @@ export function TaskDetailDrawer({
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                          Observations
-                        </label>
-                        <textarea
-                          rows={4}
-                          className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
-                          value={form.observations ?? ''}
-                          onChange={(e) => onFormChange('observations', e.target.value)}
-                        />
-                      </div>
-
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                            Installateur
-                          </label>
-                          <input
-                            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
-                            value={form.installerName ?? ''}
-                            onChange={(e) => onFormChange('installerName', e.target.value)}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                            Date
-                          </label>
-                          <input
-                            type="date"
-                            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
-                            value={form.date ?? ''}
-                            onChange={(e) => onFormChange('date', e.target.value)}
-                          />
-                        </div>
-                      </div>
+                      {/* moved Observations/Installateur/Date to SIGNED_FICHE step */}
                   </div>
 
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-300 pt-4">
+                  <div className="mt-6 flex flex-col gap-3 border-t border-slate-300 pt-4 sm:flex-row sm:items-center sm:justify-between">
                     <button
                       type="button"
-                      className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                      className="order-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:order-1"
                       onClick={() => {
-                        setForm((prev) => ({
-                          ...prev,
+                        const taskClient = taskQuery.data?.task?.client ?? ''
+                        setForm({
                           ...DEFAULT_FORM,
+                          client: taskClient,
                           year: getLocalCurrentYearString(),
                           date: getLocalTodayInputValue(),
                           installerName: installerDefaultName,
-                        }))
-                        setClientSearch('')
-                        setClientTouched(false)
-                        setClientDropdownOpen(false)
+                        })
                         setSelectedClientId(null)
                         setImmatSearch('')
                         setImmatDropdownOpen(false)
                         setSelectedFile(null)
                       }}
                     >
-                      Effacer
+                      Effacer le brouillon
                     </button>
                     <button
                       type="button"
                       disabled={isBusy}
-                      className="rounded-md bg-sky-600 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-60"
+                      className="order-1 w-full rounded-lg bg-sky-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-60 sm:order-2 sm:w-auto sm:min-w-[200px]"
                       onClick={() => setStep('SIGNED_FICHE')}
                     >
-                      Next
+                      Continuer vers la fiche signée
                     </button>
                   </div>
                 </div>
               )}
 
               {!isAdmin && step === 'SIGNED_FICHE' && (
-                <div className="rounded-xl border border-slate-300 bg-slate-100 p-4 text-slate-900">
-                  <h3 className="text-sm font-semibold text-sky-900">Fiche signée</h3>
-                  <p className="mt-1 text-xs text-slate-600">
-                    Étape 2/2: Ajoutez la fiche signée (obligatoire), puis cliquez sur Update.
-                  </p>
-                  {submitError ? <p className="mt-2 text-xs text-rose-700">{submitError}</p> : null}
+                <div className="rounded-xl border border-slate-300 bg-slate-100 p-4 text-slate-900 sm:p-5">
+                  <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex flex-wrap items-start gap-3">
+                      <button
+                        type="button"
+                        className="inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                        onClick={() => setStep('FORM')}
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                        Retour au formulaire
+                      </button>
+                      <div className="min-w-0">
+                        <h3 className="text-base font-semibold text-sky-900">Fiche signée</h3>
+                        <p className="mt-1 text-sm leading-relaxed text-slate-600">
+                          Joignez une photo ou un PDF de la fiche signée, complétez les informations puis validez.
+                        </p>
+                      </div>
+                    </div>
+                    <span
+                      className={`inline-flex shrink-0 items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                        hasExistingFiche
+                          ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-200'
+                          : 'bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200'
+                      }`}
+                    >
+                      {hasExistingFiche ? 'Mise à jour' : 'Nouvelle fiche'}
+                    </span>
+                  </div>
+
+                  {submitError ? (
+                    <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                      {submitError}
+                    </p>
+                  ) : null}
 
                   <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                    <div className="space-y-3 rounded-xl border border-slate-300 bg-white p-4">
-                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        Fichier (image ou PDF)
-                      </label>
+                    <div className="space-y-3 rounded-xl border border-slate-300 bg-white p-4 shadow-sm">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Document</p>
+                        <p className="mt-0.5 text-xs text-slate-500">Image ou PDF depuis l’appareil (galerie ou fichiers).</p>
+                      </div>
                       <input
+                        id={signedFicheInputId}
                         type="file"
                         accept="image/*,application/pdf"
-                        className="w-full text-sm text-slate-700"
+                        className="sr-only"
                         onChange={(e) => {
                           const f = e.target.files?.[0] ?? null
                           setSelectedFile(f)
                         }}
                       />
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          disabled={submittingForm || (!selectedFile && !ficheUrl)}
-                          className="rounded-md bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
-                          onClick={handleSubmitForm}
-                        >
-                          {submittingForm ? 'Updating…' : 'Update'}
-                        </button>
+                      <label
+                        htmlFor={signedFicheInputId}
+                        className="flex min-h-[48px] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-slate-50/80 px-4 py-4 text-center text-sm font-medium text-sky-800 transition hover:border-sky-400 hover:bg-sky-50/50"
+                      >
+                        <span className="text-sky-700">Choisir un fichier</span>
+                        <span className="mt-1 text-xs font-normal text-slate-500">PDF, JPG, PNG…</span>
+                      </label>
+                      {selectedFile ? (
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800">
+                          <span className="min-w-0 truncate">
+                            Fichier : <span className="font-semibold">{selectedFile.name}</span>
+                          </span>
+                          <button
+                            type="button"
+                            className="shrink-0 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                            onClick={() => setSelectedFile(null)}
+                          >
+                            Retirer
+                          </button>
+                        </div>
+                      ) : ficheUrl ? (
+                        <p className="text-sm text-slate-600">
+                          Fiche déjà enregistrée sur le serveur. Vous pouvez en choisir une nouvelle pour la remplacer.
+                        </p>
+                      ) : (
+                        <p className="text-sm text-amber-800">Un document est requis pour valider.</p>
+                      )}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        {localFilePreviewSrc || fichePreviewSrc ? (
+                          <button
+                            type="button"
+                            className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                            onClick={() => setFullPreviewOpen(true)}
+                          >
+                            Plein écran
+                          </button>
+                        ) : null}
                         {ficheUrl ? (
                           <button
                             type="button"
-                            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                            onClick={() => setStep('SIGNED_FICHE')}
+                            disabled={taskQuery.isFetching}
+                            className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+                            onClick={() => taskQuery.refetch()}
                           >
-                            Actualiser l'aperçu
+                            {taskQuery.isFetching ? 'Actualisation…' : 'Actualiser depuis le serveur'}
                           </button>
                         ) : null}
                       </div>
                     </div>
 
-                    <div className="space-y-2 rounded-xl border border-slate-300 bg-white p-4">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        Aperçu
-                      </p>
-                      {!ficheUrl ? (
-                        <p className="text-sm text-slate-500">Aucune fiche signée chargée.</p>
-                      ) : previewError ? (
-                        <p className="text-sm text-rose-300">{previewError}</p>
-                      ) : fichePreviewSrc ? (
-                        ficheExt === 'pdf' ? (
-                          <iframe title="Signed fiche preview" src={fichePreviewSrc} className="h-80 w-full rounded-md" />
+                    <div className="space-y-2 rounded-xl border border-slate-300 bg-white p-4 shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Aperçu</p>
+                      <div className="min-h-[12rem] rounded-lg border border-slate-100 bg-slate-50/50">
+                        {localFilePreviewSrc ? (
+                          selectedFile?.type === 'application/pdf' ? (
+                            <iframe title="Aperçu fiche signée" src={localFilePreviewSrc} className="h-80 w-full rounded-md" />
+                          ) : (
+                            <img
+                              src={localFilePreviewSrc}
+                              alt="Aperçu fiche signée"
+                              className="max-h-80 w-full rounded-md object-contain"
+                            />
+                          )
+                        ) : !ficheUrl ? (
+                          <p className="p-4 text-sm text-slate-500">Aucun aperçu — choisissez un fichier.</p>
+                        ) : previewError ? (
+                          <p className="p-4 text-sm text-rose-700">{previewError}</p>
+                        ) : fichePreviewSrc ? (
+                          ficheExt === 'pdf' ? (
+                            <iframe title="Aperçu fiche signée" src={fichePreviewSrc} className="h-80 w-full rounded-md" />
+                          ) : (
+                            <img
+                              src={fichePreviewSrc}
+                              alt="Aperçu fiche signée"
+                              className="max-h-80 w-full rounded-md object-contain"
+                            />
+                          )
                         ) : (
-                          <img src={fichePreviewSrc} alt="Signed fiche preview" className="max-h-80 w-full rounded-md object-contain" />
-                        )
-                      ) : (
-                        <p className="text-sm text-slate-500">Chargement de l'aperçu…</p>
-                      )}
+                          <p className="p-4 text-sm text-slate-500">Chargement de l’aperçu…</p>
+                        )}
+                      </div>
                     </div>
+                  </div>
+
+                  {fullPreviewOpen ? (
+                    <div className="fixed inset-0 z-50 flex">
+                      <button
+                        type="button"
+                        className="h-full w-full bg-black/70"
+                        onClick={() => setFullPreviewOpen(false)}
+                        aria-label="Fermer l’aperçu plein écran"
+                      />
+                      <div className="absolute inset-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl md:inset-8">
+                        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
+                          <p className="text-sm font-semibold text-slate-800">Fiche signée</p>
+                          <button
+                            type="button"
+                            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                            onClick={() => setFullPreviewOpen(false)}
+                          >
+                            Fermer
+                          </button>
+                        </div>
+                        <div className="h-[calc(100%-52px)] bg-black/5">
+                          {(() => {
+                            const src = localFilePreviewSrc || fichePreviewSrc
+                            if (!src) return <div className="p-4 text-sm text-slate-600">Aucun aperçu disponible.</div>
+                            const isPdf =
+                              (selectedFile?.type === 'application/pdf' && !!localFilePreviewSrc) || ficheExt === 'pdf'
+                            return isPdf ? (
+                              <iframe title="Fiche signée plein écran" src={src} className="h-full w-full" />
+                            ) : (
+                              <img src={src} alt="Fiche signée plein écran" className="h-full w-full object-contain" />
+                            )
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-4 rounded-xl border border-slate-300 bg-white p-4 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Informations complémentaires</p>
+                    <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                      <div className="lg:col-span-2">
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                          Observations
+                        </label>
+                        <textarea
+                          rows={4}
+                          className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-500/20"
+                          value={form.observations ?? ''}
+                          onChange={(e) => onFormChange('observations', e.target.value)}
+                          placeholder="Notes éventuelles…"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                          Installateur
+                        </label>
+                        <input
+                          className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-500/20"
+                          value={form.installerName ?? ''}
+                          onChange={(e) => onFormChange('installerName', e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                          Date
+                        </label>
+                        <input
+                          type="date"
+                          className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-500/20"
+                          value={form.date ?? ''}
+                          onChange={(e) => onFormChange('date', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="sticky bottom-0 z-10 mt-6 border-t border-slate-300 bg-slate-100/95 py-4 backdrop-blur-sm">
+                    <button
+                      type="button"
+                      disabled={submittingForm || (!selectedFile && !ficheUrl)}
+                      className="w-full rounded-lg bg-emerald-600 px-5 py-3.5 text-base font-semibold text-white shadow-md hover:bg-emerald-700 disabled:opacity-60 sm:text-sm"
+                      onClick={handleSubmitForm}
+                    >
+                      {submittingForm
+                        ? hasExistingFiche
+                          ? 'Enregistrement…'
+                          : 'Envoi…'
+                        : hasExistingFiche
+                          ? taskType === 'INSTALLATION'
+                            ? 'Mettre à jour l’installation'
+                            : 'Mettre à jour l’intervention'
+                          : taskType === 'INSTALLATION'
+                            ? 'Créer l’installation'
+                            : 'Créer l’intervention'}
+                    </button>
                   </div>
                 </div>
               )}

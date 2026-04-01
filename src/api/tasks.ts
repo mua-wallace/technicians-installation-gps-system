@@ -23,6 +23,12 @@ export type TaskFormRow = InterventionForm & {
   ficheUrl?: string | null
 }
 
+/** Body for create/update installation & intervention forms — task id is only in the URL path, not in JSON. */
+export type InstallationFormSubmitPayload = InterventionForm & {
+  ficheUrl: string
+  date: string
+}
+
 export type TaskListItem = {
   id: string
   client: string
@@ -94,12 +100,22 @@ export const tasksApi = {
     return resp.data
   },
 
-  submitInstallationForm: async (taskId: string, payload: Partial<InterventionForm>) => {
+  submitInstallationForm: async (taskId: string, payload: InstallationFormSubmitPayload) => {
+    const resp = await apiClient.post(`/tasks/${taskId}/installation-form`, payload)
+    return resp.data as { task: TaskListItem; assignments: TaskAssignment[]; form: TaskFormRow }
+  },
+
+  submitInterventionForm: async (taskId: string, payload: InstallationFormSubmitPayload) => {
+    const resp = await apiClient.post(`/tasks/${taskId}/intervention-form`, payload)
+    return resp.data as { task: TaskListItem; assignments: TaskAssignment[]; form: TaskFormRow }
+  },
+
+  updateInstallationForm: async (taskId: string, payload: Partial<InstallationFormSubmitPayload>) => {
     const resp = await apiClient.patch(`/tasks/${taskId}/installation-form`, payload)
     return resp.data as { task: TaskListItem; assignments: TaskAssignment[]; form: TaskFormRow }
   },
 
-  submitInterventionForm: async (taskId: string, payload: Partial<InterventionForm>) => {
+  updateInterventionForm: async (taskId: string, payload: Partial<InstallationFormSubmitPayload>) => {
     const resp = await apiClient.patch(`/tasks/${taskId}/intervention-form`, payload)
     return resp.data as { task: TaskListItem; assignments: TaskAssignment[]; form: TaskFormRow }
   },
