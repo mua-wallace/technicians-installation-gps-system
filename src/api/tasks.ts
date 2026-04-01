@@ -25,7 +25,12 @@ export type TaskFormRow = InterventionForm & {
 
 export type TaskListItem = {
   id: string
-  title: string
+  client: string
+  numberOfInstallations?: number
+  typeEquipment?: string
+  equipmentMake?: string
+  equipmentModel?: string
+  equipmentVersion?: string
   type: TaskType
   status: TaskStatus
   scheduledDate?: string
@@ -34,6 +39,19 @@ export type TaskListItem = {
   assignments?: TaskAssignment[]
   form?: TaskFormRow & { ficheUrl?: string | null }
 }
+
+export type TaskCreatePayload = {
+  client: string
+  numberOfInstallations: number
+  typeEquipment: string
+  equipmentMake: string
+  equipmentModel: string
+  equipmentVersion?: string
+  type: TaskType
+  scheduledDate?: string
+}
+
+export type TaskUpdatePayload = Partial<Omit<TaskCreatePayload, 'type'>>
 
 export type TaskListResponse<T> = {
   data: T[]
@@ -112,19 +130,12 @@ export const tasksApi = {
     return resp.data as { task: TaskListItem; assignments: TaskAssignment[]; form?: TaskFormRow }
   },
 
-  createTask: async (payload: { title: string; type: TaskType; scheduledDate?: string }) => {
+  createTask: async (payload: TaskCreatePayload) => {
     const resp = await apiClient.post('/tasks', payload)
     return resp.data as TaskListItem
   },
 
-  updateTask: async (
-    taskId: string,
-    payload: Partial<{
-      title: string
-      type: TaskType
-      scheduledDate: string
-    }>,
-  ) => {
+  updateTask: async (taskId: string, payload: TaskUpdatePayload) => {
     const resp = await apiClient.patch(`/tasks/${taskId}`, payload)
     return resp.data
   },

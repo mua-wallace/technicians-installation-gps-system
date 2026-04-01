@@ -58,7 +58,7 @@ export function TaskList({
       <div className="mb-3 grid gap-2 sm:grid-cols-3">
         <input
           className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-600"
-          placeholder="Search title"
+          placeholder="Search client / equipment / technicians"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
         />
@@ -92,7 +92,8 @@ export function TaskList({
           <table className="w-full min-w-[760px] border-collapse text-xs text-slate-700">
             <thead>
               <tr className="bg-slate-50 text-left uppercase tracking-wide text-[11px] text-slate-500">
-                <th className="border-b border-slate-200 px-3 py-2">Title</th>
+                <th className="border-b border-slate-200 px-3 py-2">Client</th>
+                <th className="border-b border-slate-200 px-3 py-2">Equipment</th>
                 <th className="border-b border-slate-200 px-3 py-2">Type</th>
                 <th className="border-b border-slate-200 px-3 py-2">Scheduled</th>
                 {showTechnicians ? (
@@ -106,7 +107,15 @@ export function TaskList({
               {tasks.map((task) => (
                 <tr key={task.id} className="bg-white">
                   <td className="border-b border-slate-200 px-3 py-2">
-                    <div className="font-medium text-slate-900">{task.title}</div>
+                    <div className="font-medium text-slate-900">{task.client || '—'}</div>
+                  </td>
+                  <td className="border-b border-slate-200 px-3 py-2 text-slate-700">
+                    <div className="font-medium text-slate-900">
+                      {[task.equipmentMake, task.equipmentModel].filter(Boolean).join(' ') || '—'}
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      {[task.typeEquipment, task.equipmentVersion].filter(Boolean).join(' · ') || ''}
+                    </div>
                   </td>
                   <td className="border-b border-slate-200 px-3 py-2">
                     {task.type === 'INSTALLATION' ? (
@@ -172,7 +181,7 @@ export function TaskList({
               {tasks.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={showTechnicians ? 6 : 5}
+                    colSpan={showTechnicians ? 7 : 6}
                     className="border-b border-slate-200 px-3 py-8 text-center text-sm text-slate-500"
                   >
                     No tasks found.

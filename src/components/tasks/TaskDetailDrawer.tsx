@@ -70,15 +70,31 @@ function formatInputDate(dateValue: string | undefined | null) {
   return `${yyyy}-${mm}-${dd}`
 }
 
-function isoToDateInput(value?: string | null): string {
+function isoToDatetimeLocalInput(value?: string | null): string {
   if (!value) return ''
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
   const dt = new Date(value)
   if (Number.isNaN(dt.getTime())) return ''
   const yyyy = dt.getFullYear()
   const mm = String(dt.getMonth() + 1).padStart(2, '0')
   const dd = String(dt.getDate()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}`
+  const hh = String(dt.getHours()).padStart(2, '0')
+  const min = String(dt.getMinutes()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}`
+}
+
+function datetimeLocalToIso(value: string): string | undefined {
+  if (!value) return undefined
+  const [datePart, timePart] = value.split('T')
+  if (!datePart || !timePart) return undefined
+
+  const [y, m, d] = datePart.split('-').map((n) => Number(n))
+  const timePieces = timePart.split(':').map((n) => Number(n))
+  const [hh, mm, ss = 0] = [timePieces[0] ?? 0, timePieces[1] ?? 0, timePieces[2] ?? 0]
+
+  if (![y, m, d, hh, mm, ss].every((n) => Number.isFinite(n))) return undefined
+
+  const localDt = new Date(y, m - 1, d, hh, mm, ss, 0)
+  return Number.isNaN(localDt.getTime()) ? undefined : localDt.toISOString()
 }
 
 function getLocalCurrentYearString(): string {
@@ -159,17 +175,26 @@ export function TaskDetailDrawer({
   const [submittingForm, setSubmittingForm] = useState(false)
   const [deleteError, setDeleteError] = useState<string>('')
   const [deletingTask, setDeletingTask] = useState(false)
-  const [editTitle, setEditTitle] = useState('')
+  const [editClient, setEditClient] = useState('')
+  const [editNumberOfInstallations, setEditNumberOfInstallations] = useState<number>(1)
+  const [editTypeEquipment, setEditTypeEquipment] = useState('')
+  const [editEquipmentMake, setEditEquipmentMake] = useState('')
+  const [editEquipmentModel, setEditEquipmentModel] = useState('')
+  const [editEquipmentVersion, setEditEquipmentVersion] = useState('')
   const [editType, setEditType] = useState<TaskType>('INSTALLATION')
   const [editScheduled, setEditScheduled] = useState('')
   const [savingTask, setSavingTask] = useState(false)
   const [taskSaveError, setTaskSaveError] = useState('')
+  const [editClientSearch, setEditClientSearch] = useState('')
+  const [editClientDropdownOpen, setEditClientDropdownOpen] = useState(false)
+  const [editClientTouched, setEditClientTouched] = useState(false)
   const [reassignOpen, setReassignOpen] = useState(false)
   const [reassignLeadId, setReassignLeadId] = useState<number | null>(null)
   const [reassignAssistantIds, setReassignAssistantIds] = useState<number[]>([])
   const [techSearch, setTechSearch] = useState('')
   const [reassignBusy, setReassignBusy] = useState(false)
   const [reassignError, setReassignError] = useState('')
+  const [reassignTechniciansOpen, setReassignTechniciansOpen] = useState(false)
   const [startConfirmOpen, setStartConfirmOpen] = useState(false)
   const [startAnchorRect, setStartAnchorRect] = useState<{
     top: number
@@ -218,10 +243,18 @@ export function TaskDetailDrawer({
     const tType = taskQuery.data.task?.type ?? 'INSTALLATION'
     setTaskType(tType)
     setTaskStatus(taskQuery.data.task?.status ?? 'ASSIGNED')
-    setEditTitle(taskQuery.data.task?.title ?? '')
+    setEditClient(taskQuery.data.task?.client ?? '')
+    setEditNumberOfInstallations(Number(taskQuery.data.task?.numberOfInstallations ?? 1))
+    setEditTypeEquipment(taskQuery.data.task?.typeEquipment ?? '')
+    setEditEquipmentMake(taskQuery.data.task?.equipmentMake ?? '')
+    setEditEquipmentModel(taskQuery.data.task?.equipmentModel ?? '')
+    setEditEquipmentVersion(taskQuery.data.task?.equipmentVersion ?? '')
     setEditType(tType)
-    setEditScheduled(isoToDateInput(taskQuery.data.task?.scheduledDate))
+    setEditScheduled(isoToDatetimeLocalInput(taskQuery.data.task?.scheduledDate))
     setTaskSaveError('')
+    setEditClientSearch(taskQuery.data.task?.client ?? '')
+    setEditClientTouched(false)
+    setEditClientDropdownOpen(false)
 
     const initialAssignments = taskQuery.data.assignments ?? []
     const lead = initialAssignments.find((a) => a.isLead)?.technicianId ?? null
@@ -230,6 +263,7 @@ export function TaskDetailDrawer({
     setReassignAssistantIds(assistants)
     setTechSearch('')
     setReassignError('')
+    setReassignTechniciansOpen(false)
 
     const backendForm = taskQuery.data.form as TaskFormRow | undefined
     const nextForm = { ...DEFAULT_FORM, ...(backendForm ?? {}) } as InterventionForm
@@ -254,19 +288,48 @@ export function TaskDetailDrawer({
   const initialEdit = useMemo(() => {
     const t = taskQuery.data?.task
     return {
-      title: (t?.title ?? '').trim(),
+      client: (t?.client ?? '').trim(),
+      numberOfInstallations: Number(t?.numberOfInstallations ?? 1),
+      typeEquipment: (t?.typeEquipment ?? '').trim(),
+      equipmentMake: (t?.equipmentMake ?? '').trim(),
+      equipmentModel: (t?.equipmentModel ?? '').trim(),
+      equipmentVersion: (t?.equipmentVersion ?? '').trim(),
       type: (t?.type ?? 'INSTALLATION') as TaskType,
-      scheduled: isoToDateInput(t?.scheduledDate),
+      scheduled: isoToDatetimeLocalInput(t?.scheduledDate),
     }
-  }, [taskQuery.data?.task?.title, taskQuery.data?.task?.type, taskQuery.data?.task?.scheduledDate])
+  }, [
+    taskQuery.data?.task?.client,
+    taskQuery.data?.task?.numberOfInstallations,
+    taskQuery.data?.task?.typeEquipment,
+    taskQuery.data?.task?.equipmentMake,
+    taskQuery.data?.task?.equipmentModel,
+    taskQuery.data?.task?.equipmentVersion,
+    taskQuery.data?.task?.type,
+    taskQuery.data?.task?.scheduledDate,
+  ])
 
   const isTaskDirty = useMemo(() => {
     return (
-      editTitle.trim() !== initialEdit.title ||
+      editClient.trim() !== initialEdit.client ||
+      Number(editNumberOfInstallations || 0) !== initialEdit.numberOfInstallations ||
+      editTypeEquipment.trim() !== initialEdit.typeEquipment ||
+      editEquipmentMake.trim() !== initialEdit.equipmentMake ||
+      editEquipmentModel.trim() !== initialEdit.equipmentModel ||
+      editEquipmentVersion.trim() !== initialEdit.equipmentVersion ||
       editType !== initialEdit.type ||
       editScheduled !== initialEdit.scheduled
     )
-  }, [editTitle, editType, editScheduled, initialEdit])
+  }, [
+    editClient,
+    editNumberOfInstallations,
+    editTypeEquipment,
+    editEquipmentMake,
+    editEquipmentModel,
+    editEquipmentVersion,
+    editType,
+    editScheduled,
+    initialEdit,
+  ])
 
   const techniciansQuery = useQuery({
     queryKey: ['users', 'list', 'techniciens'],
@@ -291,7 +354,7 @@ export function TaskDetailDrawer({
   const clientsQuery = useQuery({
     queryKey: ['clients', 1, 2000],
     queryFn: () => usersApi.listClients({ page: 1, limit: 2000 }),
-    enabled: open && step === 'FORM',
+    enabled: open && (step === 'FORM' || isAdmin),
     staleTime: 10 * 60_000,
   })
 
@@ -304,6 +367,13 @@ export function TaskDetailDrawer({
       .filter((c) => getClientLabel(c).toLowerCase().includes(q))
       .slice(0, 30)
   }, [clientOptions, clientSearch])
+
+  const filteredEditClients = useMemo(() => {
+    const q = (editClientSearch ?? '').trim().toLowerCase()
+    const base = clientOptions.filter((c) => getClientLabel(c))
+    if (!q) return base.slice(0, 30)
+    return base.filter((c) => getClientLabel(c).toLowerCase().includes(q)).slice(0, 30)
+  }, [clientOptions, editClientSearch])
 
   const vehiclesQuery = useQuery({
     queryKey: ['client-vehicles', selectedClientId],
@@ -455,10 +525,19 @@ export function TaskDetailDrawer({
       setTaskSaveError('')
       setSavingTask(true)
       const payload: Record<string, any> = {}
-      if (editTitle.trim() !== initialEdit.title) payload.title = editTitle.trim()
+      if (editClient.trim() !== initialEdit.client) payload.client = editClient.trim()
+      if (Number(editNumberOfInstallations || 0) !== initialEdit.numberOfInstallations) {
+        payload.numberOfInstallations = Math.max(1, Number(editNumberOfInstallations || 1))
+      }
+      if (editTypeEquipment.trim() !== initialEdit.typeEquipment) payload.typeEquipment = editTypeEquipment.trim()
+      if (editEquipmentMake.trim() !== initialEdit.equipmentMake) payload.equipmentMake = editEquipmentMake.trim()
+      if (editEquipmentModel.trim() !== initialEdit.equipmentModel) payload.equipmentModel = editEquipmentModel.trim()
+      if (editEquipmentVersion.trim() !== initialEdit.equipmentVersion) {
+        payload.equipmentVersion = editEquipmentVersion.trim() || undefined
+      }
       // Backend rejects `type` on PATCH /tasks/:id (it returns: "property type should not exist")
       // so we intentionally never send it from the UI.
-      if (editScheduled !== initialEdit.scheduled) payload.scheduledDate = editScheduled || undefined
+      if (editScheduled !== initialEdit.scheduled) payload.scheduledDate = datetimeLocalToIso(editScheduled) || undefined
 
       await tasksApi.updateTask(taskId, payload)
       await taskQuery.refetch()
@@ -502,8 +581,8 @@ export function TaskDetailDrawer({
   }
 
   const handleDeleteTask = async () => {
-    const title = taskQuery.data?.task?.title ?? 'this task'
-    const ok = window.confirm(`Delete "${title}"? This action cannot be undone.`)
+    const label = taskQuery.data?.task?.client ?? 'this task'
+    const ok = window.confirm(`Delete "${label}"? This action cannot be undone.`)
     if (!ok) return
     try {
       setDeleteError('')
@@ -530,7 +609,7 @@ export function TaskDetailDrawer({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full border border-slate-300 bg-white px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-900">
-                {taskQuery.data?.task?.title ?? 'Task'}
+                {taskQuery.data?.task?.client ?? 'Task'}
               </span>
               <span className="rounded-full bg-slate-300/70 px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-900">
                 {taskType}
@@ -683,75 +762,111 @@ export function TaskDetailDrawer({
 
                   {reassignError ? <p className="mt-2 text-xs text-rose-700">{reassignError}</p> : null}
 
-                  <div className="mt-3">
-                    <input
-                      className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
-                      placeholder="Search technician (name / username / ID)"
-                      value={techSearch}
-                      onChange={(e) => setTechSearch(e.target.value)}
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    className="mt-3 flex w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-900 hover:bg-slate-50"
+                    onClick={() => setReassignTechniciansOpen((s) => !s)}
+                  >
+                    <span className="min-w-0 truncate">
+                      {reassignLeadId ? (
+                        <>
+                          <span className="font-semibold">Lead:</span>{' '}
+                          {technicianOptions.find((t) => t.id === reassignLeadId)?.fullname ||
+                            technicianOptions.find((t) => t.id === reassignLeadId)?.username ||
+                            `#${reassignLeadId}`}
+                        </>
+                      ) : (
+                        <span className="text-slate-600">Select technicians…</span>
+                      )}
+                      <span className="text-slate-500">
+                        {reassignAssistantIds.length > 0 ? ` · Assistants: ${reassignAssistantIds.length}` : ''}
+                      </span>
+                    </span>
+                    <svg
+                      className={`h-5 w-5 shrink-0 text-slate-500 transition-transform ${reassignTechniciansOpen ? 'rotate-180' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
 
-                  <div className="mt-3 max-h-72 space-y-2 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3">
-                    {techniciansQuery.isLoading ? (
-                      <p className="text-sm text-slate-500">Loading technicians…</p>
-                    ) : technicianOptions.length === 0 ? (
-                      <p className="text-sm text-slate-500">No technicians available.</p>
-                    ) : filteredTechnicians.length === 0 ? (
-                      <p className="text-sm text-slate-500">No technicians match your search.</p>
-                    ) : (
-                      filteredTechnicians.map((tech) => {
-                        const isLead = reassignLeadId === tech.id
-                        const isAssistant = reassignAssistantIds.includes(tech.id)
-                        const display = tech.fullname || tech.username
-                        return (
-                          <div
-                            key={tech.id}
-                            className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2"
-                          >
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium text-slate-900">{display}</p>
-                              <p className="text-xs text-slate-500">#{tech.id} · {tech.username}</p>
-                            </div>
-                            <div className="flex items-center gap-4">
-                              <label className="flex items-center gap-2 text-xs text-slate-700">
-                                <input
-                                  type="radio"
-                                  name="reassign-lead-technician"
-                                  checked={isLead}
-                                  onChange={() => {
-                                    setReassignLeadId(tech.id)
-                                    setReassignAssistantIds((prev) => prev.filter((id) => id !== tech.id))
-                                  }}
-                                  className="h-4 w-4 border-slate-300 text-sky-700 focus:ring-sky-500"
-                                />
-                                Lead
-                              </label>
-                              <label className="flex items-center gap-2 text-xs text-slate-700">
-                                <input
-                                  type="checkbox"
-                                  checked={isAssistant}
-                                  disabled={isLead}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked
-                                    setReassignAssistantIds((prev) => {
-                                      if (checked) {
-                                        if (prev.includes(tech.id)) return prev
-                                        return [...prev, tech.id]
-                                      }
-                                      return prev.filter((id) => id !== tech.id)
-                                    })
-                                  }}
-                                  className="h-4 w-4 border-slate-300 text-sky-700 focus:ring-sky-500"
-                                />
-                                Assistant
-                              </label>
-                            </div>
+                  {reassignTechniciansOpen ? (
+                    <>
+                      <div className="mt-3">
+                        <input
+                          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
+                          placeholder="Search technician (name / username / ID)"
+                          value={techSearch}
+                          onChange={(e) => setTechSearch(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="mt-3 max-h-72 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3">
+                        {techniciansQuery.isLoading ? (
+                          <p className="text-sm text-slate-500">Loading technicians…</p>
+                        ) : technicianOptions.length === 0 ? (
+                          <p className="text-sm text-slate-500">No technicians available.</p>
+                        ) : filteredTechnicians.length === 0 ? (
+                          <p className="text-sm text-slate-500">No technicians match your search.</p>
+                        ) : (
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            {filteredTechnicians.map((tech) => {
+                              const isLead = reassignLeadId === tech.id
+                              const isAssistant = reassignAssistantIds.includes(tech.id)
+                              const display = tech.fullname || tech.username
+                              return (
+                                <div
+                                  key={tech.id}
+                                  className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2"
+                                >
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium text-slate-900">{display}</p>
+                                    <p className="text-xs text-slate-500">#{tech.id} · {tech.username}</p>
+                                  </div>
+                                  <div className="flex items-center gap-4">
+                                    <label className="flex items-center gap-2 text-xs text-slate-700">
+                                      <input
+                                        type="radio"
+                                        name="reassign-lead-technician"
+                                        checked={isLead}
+                                        onChange={() => {
+                                          setReassignLeadId(tech.id)
+                                          setReassignAssistantIds((prev) => prev.filter((id) => id !== tech.id))
+                                        }}
+                                        className="h-4 w-4 border-slate-300 text-sky-700 focus:ring-sky-500"
+                                      />
+                                      Lead
+                                    </label>
+                                    <label className="flex items-center gap-2 text-xs text-slate-700">
+                                      <input
+                                        type="checkbox"
+                                        checked={isAssistant}
+                                        disabled={isLead}
+                                        onChange={(e) => {
+                                          const checked = e.target.checked
+                                          setReassignAssistantIds((prev) => {
+                                            if (checked) {
+                                              if (prev.includes(tech.id)) return prev
+                                              return [...prev, tech.id]
+                                            }
+                                            return prev.filter((id) => id !== tech.id)
+                                          })
+                                        }}
+                                        className="h-4 w-4 border-slate-300 text-sky-700 focus:ring-sky-500"
+                                      />
+                                      Assistant
+                                    </label>
+                                  </div>
+                                </div>
+                              )
+                            })}
                           </div>
-                        )
-                      })
-                    )}
-                  </div>
+                        )}
+                      </div>
+                    </>
+                  ) : null}
 
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
                     <p>
@@ -783,7 +898,9 @@ export function TaskDetailDrawer({
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Edit task</p>
-                      <p className="mt-1 text-xs text-slate-500">Prefilled from the existing task. Update is disabled until changes.</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Update client, device and scheduling details. The Update button is enabled only when something changes.
+                      </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -791,7 +908,15 @@ export function TaskDetailDrawer({
                         disabled={!isTaskDirty || savingTask}
                         className="rounded-md border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                         onClick={() => {
-                          setEditTitle(initialEdit.title)
+                          setEditClient(initialEdit.client)
+                          setEditClientSearch(initialEdit.client)
+                          setEditClientTouched(false)
+                          setEditClientDropdownOpen(false)
+                          setEditNumberOfInstallations(initialEdit.numberOfInstallations)
+                          setEditTypeEquipment(initialEdit.typeEquipment)
+                          setEditEquipmentMake(initialEdit.equipmentMake)
+                          setEditEquipmentModel(initialEdit.equipmentModel)
+                          setEditEquipmentVersion(initialEdit.equipmentVersion)
                           setEditType(initialEdit.type)
                           setEditScheduled(initialEdit.scheduled)
                           setTaskSaveError('')
@@ -812,42 +937,194 @@ export function TaskDetailDrawer({
 
                   {taskSaveError ? <p className="mt-2 text-xs text-rose-700">{taskSaveError}</p> : null}
 
-                  <div className="mt-4 space-y-4">
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">Title</label>
-                      <input
-                        className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
-                        value={editTitle}
-                        onChange={(e) => setEditTitle(e.target.value)}
-                        placeholder="e.g. Installation GPS - Toyota Hilux"
-                      />
+                  <datalist id="edit-equipment-make-options">
+                    <option value="Teltonika" />
+                    <option value="Queclink" />
+                    <option value="Ruptela" />
+                    <option value="Concox" />
+                  </datalist>
+
+                  <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">Task details</p>
+                      <p className="mt-1 text-[11px] text-slate-500">Who and when.</p>
+
+                      <div className="mt-4 space-y-4">
+                        <div>
+                          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">Client</label>
+                          <div className="relative">
+                            <input
+                              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-600 focus:ring-0"
+                              value={editClientTouched ? editClientSearch : editClient}
+                              onChange={(e) => {
+                                const v = e.target.value
+                                setEditClient(v)
+                                setEditClientSearch(v)
+                                setEditClientTouched(true)
+                                setEditClientDropdownOpen(true)
+                              }}
+                              onFocus={() => {
+                                setEditClientTouched(true)
+                                setEditClientDropdownOpen(true)
+                                if (!editClientSearch) setEditClientSearch(editClient)
+                              }}
+                              onBlur={() => {
+                                setTimeout(() => setEditClientDropdownOpen(false), 120)
+                              }}
+                              placeholder={clientsQuery.isLoading ? 'Loading clients…' : 'Select a client or type a new name'}
+                            />
+                            {editClientDropdownOpen ? (
+                              <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+                                {clientsQuery.isLoading ? (
+                                  <div className="px-3 py-2 text-sm text-slate-500">Loading clients…</div>
+                                ) : filteredEditClients.length > 0 ? (
+                                  <div className="max-h-56 overflow-y-auto">
+                                    {filteredEditClients.map((c) => {
+                                      const label = getClientLabel(c)
+                                      return (
+                                        <button
+                                          key={c.id}
+                                          type="button"
+                                          className="w-full px-3 py-2 text-left text-sm text-slate-900 hover:bg-slate-50"
+                                          onMouseDown={(e) => e.preventDefault()}
+                                          onClick={() => {
+                                            setEditClient(label)
+                                            setEditClientSearch(label)
+                                            setEditClientTouched(true)
+                                            setEditClientDropdownOpen(false)
+                                          }}
+                                        >
+                                          {label}
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="px-3 py-2 text-sm text-slate-500">
+                                    No match. You can keep typing to set a custom client name.
+                                  </div>
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div>
+                            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">Type</label>
+                            <select
+                              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
+                              value={editType}
+                              onChange={(e) => setEditType(e.target.value as TaskType)}
+                              disabled
+                            >
+                              <option value="INSTALLATION">INSTALLATION</option>
+                              <option value="INTERVENTION">INTERVENTION</option>
+                            </select>
+                            <p className="mt-1 text-[11px] text-slate-500">Task type cannot be changed.</p>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                              Scheduled date-time (optional)
+                            </label>
+                            <input
+                              type="datetime-local"
+                              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
+                              value={editScheduled}
+                              onChange={(e) => setEditScheduled(e.target.value)}
+                            />
+                            <p className="mt-1 text-[11px] text-slate-500">Local time is converted to UTC for the API.</p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div>
-                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">Type</label>
-                        <select
-                          className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
-                          value={editType}
-                          onChange={(e) => setEditType(e.target.value as TaskType)}
-                          disabled
-                        >
-                          <option value="INSTALLATION">INSTALLATION</option>
-                          <option value="INTERVENTION">INTERVENTION</option>
-                        </select>
-                        <p className="mt-1 text-[11px] text-slate-500">Le type ne peut pas être modifié.</p>
-                      </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">Equipment</p>
+                      <p className="mt-1 text-[11px] text-slate-500">Device details used by the technician.</p>
 
-                      <div>
-                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                          Scheduled date (optional)
-                        </label>
-                        <input
-                          type="date"
-                          className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
-                          value={editScheduled}
-                          onChange={(e) => setEditScheduled(e.target.value)}
-                        />
+                      <div className="mt-4 space-y-4">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div>
+                            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                              Number of installations
+                            </label>
+                            <div className="mt-1 flex items-stretch gap-2">
+                              <button
+                                type="button"
+                                className="w-10 rounded-md border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                onClick={() => setEditNumberOfInstallations((n) => Math.max(1, n - 1))}
+                                aria-label="Decrease installations"
+                              >
+                                −
+                              </button>
+                              <input
+                                type="number"
+                                min={1}
+                                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
+                                value={editNumberOfInstallations}
+                                onChange={(e) => setEditNumberOfInstallations(Math.max(1, Number(e.target.value || 1)))}
+                              />
+                              <button
+                                type="button"
+                                className="w-10 rounded-md border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                onClick={() => setEditNumberOfInstallations((n) => Math.max(1, n + 1))}
+                                aria-label="Increase installations"
+                              >
+                                +
+                              </button>
+                            </div>
+                            <p className="mt-1 text-[11px] text-slate-500">Set quantity for bulk installs.</p>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">Type equipment</label>
+                            <select
+                              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
+                              value={editTypeEquipment}
+                              onChange={(e) => setEditTypeEquipment(e.target.value)}
+                            >
+                              <option value="DashCam">DashCam</option>
+                              <option value="GPS">GPS</option>
+                              <option value="Camera Secondaire">Camera Secondaire</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div>
+                            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">Equipment make</label>
+                            <input
+                              list="edit-equipment-make-options"
+                              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
+                              value={editEquipmentMake}
+                              onChange={(e) => setEditEquipmentMake(e.target.value)}
+                              placeholder="e.g. Teltonika"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">Equipment model</label>
+                            <input
+                              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
+                              value={editEquipmentModel}
+                              onChange={(e) => setEditEquipmentModel(e.target.value)}
+                              placeholder="e.g. FMC650"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                            Equipment version (optional)
+                          </label>
+                          <input
+                            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
+                            value={editEquipmentVersion}
+                            onChange={(e) => setEditEquipmentVersion(e.target.value)}
+                            placeholder="e.g. v2"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
