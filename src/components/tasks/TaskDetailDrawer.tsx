@@ -1,12 +1,13 @@
 import { useEffect, useId, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { TaskAssignment, TaskFormRow, TaskStatus, TaskType } from '../../api/tasks'
-import { tasksApi, type InstallationFormSubmitPayload } from '../../api/tasks'
+import { tasksApi, type InstallationFormPatchPayload, type InstallationFormSubmitPayload } from '../../api/tasks'
 import type { InterventionForm } from '../../store/useAppStore'
 import { usersApi } from '../../api/users'
 import type { ClientRow } from '../../api/users'
 import type { ClientVehicleRow } from '../../api/users'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
+import { TaskSubmittedFormsCollapsible } from './TaskSubmittedFormsCollapsible'
 
 const DEFAULT_FORM: InterventionForm = {
   client: '',
@@ -54,6 +55,10 @@ type Props = {
   onTaskDeleted?: (taskId: string) => void
   onTaskUpdated?: (taskId: string) => void
   isAdmin: boolean
+  /** Used with “my submissions” filter (matches `installerName` when API has no technician id on form). */
+  viewerUsername?: string
+  /** Incremented when opening from “Ajouter une fiche” in the task list — forces step 1 (formulaire). */
+  taskFormIntentNonce?: number
 }
 
 type Step = 'FORM' | 'SIGNED_FICHE'
@@ -68,17 +73,6 @@ function formatInputDate(dateValue: string | undefined | null) {
   const mm = String(d.getUTCMonth() + 1).padStart(2, '0')
   const dd = String(d.getUTCDate()).padStart(2, '0')
   return `${yyyy}-${mm}-${dd}`
-}
-
-function dateInputToIso(value: string | undefined | null): string {
-  if (!value) return new Date().toISOString()
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const [y, m, d] = value.split('-').map((n) => Number(n))
-    const dt = new Date(y, (m ?? 1) - 1, d ?? 1, 0, 0, 0, 0)
-    return Number.isNaN(dt.getTime()) ? new Date().toISOString() : dt.toISOString()
-  }
-  const dt = new Date(value)
-  return Number.isNaN(dt.getTime()) ? new Date().toISOString() : dt.toISOString()
 }
 
 function isoToDatetimeLocalInput(value?: string | null): string {
@@ -170,7 +164,10 @@ export function TaskDetailDrawer({
   onTaskDeleted,
   onTaskUpdated,
   isAdmin,
+  viewerUsername = '',
+  taskFormIntentNonce = 0,
 }: Props) {
+  const queryClient = useQueryClient()
   const [step, setStep] = useState<Step>('FORM')
   const [taskType, setTaskType] = useState<TaskType>('INSTALLATION')
   const [taskStatus, setTaskStatus] = useState<TaskStatus>('ASSIGNED')
@@ -297,6 +294,12 @@ export function TaskDetailDrawer({
     setSelectedFile(null)
     setPreviewError('')
   }, [taskQuery.data])
+
+  /** After task load, “Ajouter une fiche” from the list (nonce > 0) opens the formulaire step. */
+  useEffect(() => {
+    if (!open || !taskQuery.data || isAdmin || taskFormIntentNonce === 0) return
+    setStep('FORM')
+  }, [taskFormIntentNonce, taskQuery.data, open, isAdmin])
 
   const initialEdit = useMemo(() => {
     const t = taskQuery.data?.task
@@ -498,19 +501,24 @@ export function TaskDetailDrawer({
       })
       const submitPayload: InstallationFormSubmitPayload = {
         ...(payload as InterventionForm),
+        taskId,
         client: taskQuery.data?.task?.client ?? form.client ?? '',
-        date: dateInputToIso(form.date),
+        // API sample uses YYYY-MM-DD on POST body
+        date: formatInputDate(form.date) || getLocalTodayInputValue(),
         ficheUrl: nextFicheUrl,
       }
 
       const effectiveType = (taskQuery.data?.task?.type ?? taskType) as TaskType
+      const { taskId: _omitTaskId, ...patchPayload } = submitPayload
+      const patchBody = patchPayload as InstallationFormPatchPayload
+
       const resp = hasExistingFiche
         ? effectiveType === 'INTERVENTION'
-          ? await tasksApi.updateInterventionForm(taskId, submitPayload)
-          : await tasksApi.updateInstallationForm(taskId, submitPayload)
+          ? await tasksApi.updateInterventionForm(taskId, patchBody)
+          : await tasksApi.updateInstallationForm(taskId, patchBody)
         : effectiveType === 'INTERVENTION'
-          ? await tasksApi.submitInterventionForm(taskId, submitPayload)
-          : await tasksApi.submitInstallationForm(taskId, submitPayload)
+          ? await tasksApi.submitInterventionForm(submitPayload)
+          : await tasksApi.submitInstallationForm(submitPayload)
 
       const updatedForm = resp?.form
       setFicheUrl(updatedForm?.ficheUrl ?? nextFicheUrl ?? ficheUrl)
@@ -518,6 +526,8 @@ export function TaskDetailDrawer({
       const nextStatus = resp?.task?.status ?? taskStatus
       // Backend handles status updates as part of form creation/submission.
       setTaskStatus(nextStatus)
+      void queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      void queryClient.invalidateQueries({ queryKey: ['task', taskId] })
       onTaskUpdated?.(taskId)
       onClose()
     } catch (e: any) {
@@ -792,6 +802,15 @@ export function TaskDetailDrawer({
                 </div>
                 {deleteError ? <p className="mt-2 text-xs text-rose-700">{deleteError}</p> : null}
               </div>
+
+              <TaskSubmittedFormsCollapsible
+                forms={taskQuery.data?.forms}
+                numberOfInstallations={taskQuery.data?.task?.numberOfInstallations ?? 1}
+                isAdmin={isAdmin}
+                technicianId={currentUserId}
+                technicianFullname={installerDefaultName}
+                technicianUsername={viewerUsername}
+              />
 
               <ConfirmDialog
                 open={startConfirmOpen}

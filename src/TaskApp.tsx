@@ -68,28 +68,34 @@ export function TaskApp() {
   }, [roleLower])
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+  /** Bumped when a technician opens “Ajouter une fiche” from the list so the drawer starts on the form step. */
+  const [taskFormIntentNonce, setTaskFormIntentNonce] = useState(0)
 
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<TaskType | ''>('')
   const [statusFilter, setStatusFilter] = useState<TaskStatus | ''>('')
 
   const tasksQuery = useQuery({
-    // Search is applied client-side so it matches all visible columns (incl. technicians).
-    queryKey: ['tasks', { typeFilter, statusFilter }],
+    queryKey: ['tasks', 'submitted', { typeFilter, statusFilter }],
     queryFn: () =>
-      tasksApi.listTasks({
+      tasksApi.listTasksSubmitted({
         page: 1,
         limit: 200,
         status: statusFilter || undefined,
         type: typeFilter || undefined,
         search: undefined,
-        include: 'assignments,technicians,form',
+        include: 'assignments,technicians,forms',
       }),
     enabled: isAuthenticated,
     staleTime: 15_000,
   })
 
   const myUserId = profile?.id
+
+  const handleAddFormFromList = (taskId: string) => {
+    setSelectedTaskId(taskId)
+    setTaskFormIntentNonce((n) => n + 1)
+  }
 
   const tasksForUI = useMemo(() => {
     const tasks: TaskListItem[] = tasksQuery.data?.data ?? []
@@ -345,6 +351,11 @@ export function TaskApp() {
               onTypeFilterChange={(v) => setTypeFilter((v as TaskType | '') || '')}
               statusFilter={statusFilter}
               onStatusFilterChange={(v) => setStatusFilter((v as TaskStatus | '') || '')}
+              viewerIsAdmin={isAdmin}
+              viewerTechnicianId={myUserId ?? null}
+              viewerFullname={profile?.fullname ?? null}
+              viewerUsername={profile?.username ?? null}
+              onAddFormForTask={!isAdmin ? handleAddFormFromList : undefined}
             />
           </div>
         </main>
@@ -363,8 +374,14 @@ export function TaskApp() {
           }}
           onTaskUpdated={async () => {
             await queryClient.invalidateQueries({ queryKey: ['tasks'] })
+            await queryClient.invalidateQueries({ queryKey: ['task'] })
           }}
-          onClose={() => setSelectedTaskId(null)}
+          viewerUsername={profile?.username ?? ''}
+          taskFormIntentNonce={taskFormIntentNonce}
+          onClose={() => {
+            setSelectedTaskId(null)
+            setTaskFormIntentNonce(0)
+          }}
         />
       ) : null}
 

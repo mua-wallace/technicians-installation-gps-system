@@ -1,5 +1,5 @@
-import type React from 'react'
-import type { TaskListItem } from '../../api/tasks'
+import { Fragment, useState, type ReactNode } from 'react'
+import { filterFormsForViewer, type TaskFormInstallation, type TaskListItem } from '../../api/tasks'
 
 function getTechnicianDisplayName(task: TaskListItem): string {
   const assignments = task.assignments ?? []
@@ -11,7 +11,19 @@ function getTechnicianDisplayName(task: TaskListItem): string {
   return names.length > 0 ? names.join(', ') : '—'
 }
 
-function Pill({ children, className }: { children: React.ReactNode; className: string }) {
+function formatFormDate(f: TaskFormInstallation): string {
+  const raw = f.date?.trim() || f.createdAt
+  if (!raw) return '—'
+  try {
+    const d = new Date(raw)
+    if (!Number.isNaN(d.getTime())) return d.toLocaleDateString()
+  } catch {
+    /* fall through */
+  }
+  return raw
+}
+
+function Pill({ children, className }: { children: ReactNode; className: string }) {
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${className}`}>
       {children}
@@ -30,6 +42,13 @@ type Props = {
   onTypeFilterChange: (next: string) => void
   statusFilter: string
   onStatusFilterChange: (next: string) => void
+  /** For “soumis / prévu” counts */
+  viewerIsAdmin: boolean
+  viewerTechnicianId: number | null
+  viewerFullname?: string | null
+  viewerUsername?: string | null
+  /** Technicians assigned to the task can open the task to add another fiche. */
+  onAddFormForTask?: (taskId: string) => void
 }
 
 export function TaskList({
@@ -43,7 +62,18 @@ export function TaskList({
   onTypeFilterChange,
   statusFilter,
   onStatusFilterChange,
+  viewerIsAdmin,
+  viewerTechnicianId,
+  viewerFullname,
+  viewerUsername,
+  onAddFormForTask,
 }: Props) {
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null)
+
+  const toggleRow = (taskId: string) => {
+    setOpenTaskId((id) => (id === taskId ? null : taskId))
+  }
+
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="shrink-0 mb-3 flex items-center justify-between gap-2">
@@ -87,14 +117,14 @@ export function TaskList({
 
       <div className="min-h-0 flex-1 overflow-auto">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[840px] border-collapse text-xs text-slate-700">
+          <table className="w-full min-w-[880px] border-collapse text-xs text-slate-700">
             <thead>
               <tr className="bg-slate-50 text-left uppercase tracking-wide text-[11px] text-slate-500">
                 <th className="border-b border-slate-200 px-3 py-2 text-center">Client</th>
                 <th className="border-b border-slate-200 px-3 py-2 text-center">Type</th>
                 <th className="border-b border-slate-200 px-3 py-2 text-center">Technicians</th>
-                <th className="border-b border-slate-200 px-3 py-2 text-center whitespace-normal break-words leading-tight max-w-40">
-                  No of Instal/Interventions
+                <th className="border-b border-slate-200 px-3 py-2 text-center whitespace-normal break-words leading-tight max-w-36">
+                  Soumis / prévu
                 </th>
                 <th className="border-b border-slate-200 px-3 py-2 text-center">Schedule</th>
                 <th className="border-b border-slate-200 px-3 py-2 text-center">Status</th>
@@ -102,10 +132,48 @@ export function TaskList({
               </tr>
             </thead>
             <tbody>
-              {tasks.map((task) => (
-                <tr key={task.id} className="bg-white">
-                  <td className="border-b border-slate-200 px-3 py-2 text-center">
-                    <div className="font-medium text-slate-900">{task.client || '—'}</div>
+              {tasks.map((task) => {
+                const planned = Math.max(1, Number(task.numberOfInstallations) || 1)
+                const visibleForms = filterFormsForViewer(task.forms, {
+                  isAdmin: viewerIsAdmin,
+                  technicianId: viewerTechnicianId,
+                  fullname: viewerFullname,
+                  username: viewerUsername,
+                })
+                const submitted = visibleForms.length
+                const isOpen = openTaskId === task.id
+                const formsSorted = [...visibleForms].sort(
+                  (a, b) => Number(a.installationIndex ?? 0) - Number(b.installationIndex ?? 0),
+                )
+                const isAssignedToMe =
+                  viewerTechnicianId != null &&
+                  (task.assignments ?? []).some((a) => a.technicianId === viewerTechnicianId)
+                const showAddForm =
+                  !viewerIsAdmin && isAssignedToMe && typeof onAddFormForTask === 'function'
+                return (
+                  <Fragment key={task.id}>
+                  <tr className="bg-white">
+                  <td className="border-b border-slate-200 px-2 py-2 text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleRow(task.id)}
+                        className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                        title={isOpen ? 'Masquer les fiches' : 'Voir immatriculation, châssis, installateur, date'}
+                        aria-expanded={isOpen}
+                      >
+                        <span className="sr-only">{isOpen ? 'Replier' : 'Déplier'}</span>
+                        <svg
+                          className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      <div className="min-w-0 flex-1 text-center font-medium text-slate-900">{task.client || '—'}</div>
+                    </div>
                   </td>
                   <td className="border-b border-slate-200 px-3 py-2 text-center">
                     {task.type === 'INSTALLATION' ? (
@@ -122,8 +190,13 @@ export function TaskList({
                     <span className="mx-auto block line-clamp-2 max-w-[260px]">{getTechnicianDisplayName(task)}</span>
                   </td>
                   <td className="border-b border-slate-200 px-3 py-2 text-center text-slate-700">
-                    <span className="font-medium text-slate-900">
-                      {Number.isFinite(task.numberOfInstallations as any) ? String(task.numberOfInstallations) : '—'}
+                    <span className="inline-flex flex-col items-center gap-0.5">
+                      <span className="text-sm font-semibold tabular-nums text-slate-900">
+                        {submitted} / {planned}
+                      </span>
+                      <span className="text-[10px] font-normal uppercase tracking-wide text-slate-500">
+                        {viewerIsAdmin ? 'toutes' : 'mes fiches'}
+                      </span>
                     </span>
                   </td>
                   <td className="border-b border-slate-200 px-3 py-2 text-center text-slate-600">
@@ -168,8 +241,77 @@ export function TaskList({
                       </svg>
                     </button>
                   </td>
-                </tr>
-              ))}
+                  </tr>
+                  {isOpen ? (
+                    <tr className="bg-slate-50/90">
+                      <td colSpan={7} className="border-b border-slate-200 px-3 py-3 text-left align-top">
+                        {showAddForm ? (
+                          <div className="mb-3 flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onAddFormForTask(task.id)
+                                setOpenTaskId(null)
+                              }}
+                              className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-sky-700"
+                            >
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                              Ajouter une fiche
+                            </button>
+                            <span className="text-xs text-slate-500">Ouvre le formulaire pour cette tâche.</span>
+                          </div>
+                        ) : null}
+                        {formsSorted.length === 0 ? (
+                          <p className="text-center text-sm text-slate-500">Aucune fiche à afficher pour cette tâche.</p>
+                        ) : (
+                          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                            <table className="w-full min-w-[640px] border-collapse text-xs">
+                              <thead>
+                                <tr className="bg-slate-100 text-[11px] uppercase tracking-wide text-slate-600">
+                                  <th className="border-b border-slate-200 px-3 py-2 text-left">#</th>
+                                  <th className="border-b border-slate-200 px-3 py-2 text-left">Immatriculation</th>
+                                  <th className="border-b border-slate-200 px-3 py-2 text-left">Châssis</th>
+                                  <th className="border-b border-slate-200 px-3 py-2 text-left">Installateur</th>
+                                  <th className="border-b border-slate-200 px-3 py-2 text-left">Date</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {formsSorted.map((f) => (
+                                  <tr key={f.id} className="text-slate-800">
+                                    <td className="border-b border-slate-100 px-3 py-2 tabular-nums text-slate-600">
+                                      {f.installationIndex != null ? f.installationIndex : '—'}
+                                    </td>
+                                    <td className="border-b border-slate-100 px-3 py-2">
+                                      {(f.immatriculation || '').trim() || '—'}
+                                    </td>
+                                    <td className="border-b border-slate-100 px-3 py-2">
+                                      {(f.chassis || '').trim() || '—'}
+                                    </td>
+                                    <td className="border-b border-slate-100 px-3 py-2">
+                                      {(f.installerName || '').trim() || '—'}
+                                    </td>
+                                    <td className="border-b border-slate-100 px-3 py-2">{formatFormDate(f)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setOpenTaskId(null)}
+                          className="mt-2 text-xs font-medium text-sky-700 hover:underline"
+                        >
+                          Fermer
+                        </button>
+                      </td>
+                    </tr>
+                  ) : null}
+                  </Fragment>
+                )
+              })}
 
               {tasks.length === 0 ? (
                 <tr>
