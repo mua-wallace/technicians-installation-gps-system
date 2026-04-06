@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { TaskAssignment, TaskFormRow, TaskStatus, TaskType } from '../../api/tasks'
 import { tasksApi, type InstallationFormPatchPayload, type InstallationFormSubmitPayload } from '../../api/tasks'
@@ -6,6 +6,13 @@ import type { InterventionForm } from '../../store/useAppStore'
 import { usersApi } from '../../api/users'
 import type { ClientRow } from '../../api/users'
 import type { ClientVehicleRow } from '../../api/users'
+import { useI18n } from '../../i18n/I18nContext'
+import {
+  clearTaskFormDraft,
+  draftMatchesCurrentTask,
+  loadTaskFormDraft,
+  saveTaskFormDraft,
+} from '../../lib/taskFormDraftStorage'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { TaskSubmittedFormsCollapsible } from './TaskSubmittedFormsCollapsible'
 
@@ -167,6 +174,7 @@ export function TaskDetailDrawer({
   viewerUsername = '',
   taskFormIntentNonce = 0,
 }: Props) {
+  const { t } = useI18n()
   const queryClient = useQueryClient()
   const [step, setStep] = useState<Step>('FORM')
   const [taskType, setTaskType] = useState<TaskType>('INSTALLATION')
@@ -220,6 +228,10 @@ export function TaskDetailDrawer({
   const [immatDropdownOpen, setImmatDropdownOpen] = useState(false)
   const [vehicleManualMode, setVehicleManualMode] = useState(false)
   const signedFicheInputId = useId()
+  /** After clearing the draft, block a pending debounced save from re-writing localStorage. */
+  const suppressDraftSaveUntilRef = useRef(0)
+  /** Snapshot after server/draft load — we only persist when the user changes beyond this (no false “drafts”). */
+  const formDraftBaselineRef = useRef<string | null>(null)
 
   const taskQuery = useQuery({
     queryKey: ['task', taskId],
@@ -249,6 +261,7 @@ export function TaskDetailDrawer({
 
   useEffect(() => {
     if (!taskQuery.data) return
+    if (taskQuery.data.task?.id !== taskId) return
 
     const tType = taskQuery.data.task?.type ?? 'INSTALLATION'
     setTaskType(tType)
@@ -283,23 +296,48 @@ export function TaskDetailDrawer({
     if (!nextForm.year) nextForm.year = getLocalCurrentYearString()
     if (!nextForm.date) nextForm.date = getLocalTodayInputValue()
     if (!nextForm.installerName) nextForm.installerName = installerDefaultName
+
+    let nextStep: Step = backendForm?.ficheUrl ? 'SIGNED_FICHE' : 'FORM'
+    let nextFicheUrl: string | null = backendForm?.ficheUrl ?? null
+
+    const uid = currentUserId
+    const assigned = uid != null && initialAssignments.some((a) => a.technicianId === uid)
+    if (!isAdmin && uid != null && assigned) {
+      const draft = loadTaskFormDraft(uid, taskId)
+      const taskUpdatedAt = taskQuery.data.task?.updatedAt
+      if (draft) {
+        if (draftMatchesCurrentTask(draft, taskUpdatedAt)) {
+          Object.assign(nextForm, draft.form)
+          nextForm.date = formatInputDate(nextForm.date)
+          nextStep = draft.step
+          nextFicheUrl = draft.ficheUrl != null && draft.ficheUrl !== '' ? draft.ficheUrl : nextFicheUrl
+        } else {
+          clearTaskFormDraft(uid, taskId)
+        }
+      }
+    }
+
+    if (!isAdmin && taskFormIntentNonce > 0) {
+      nextStep = 'FORM'
+    }
+
+    formDraftBaselineRef.current = JSON.stringify({
+      form: nextForm,
+      step: nextStep,
+      ficheUrl: nextFicheUrl,
+    })
+
     setForm(nextForm)
     setSelectedClientId(null)
     setImmatSearch(nextForm.immatriculation ?? '')
     setImmatDropdownOpen(false)
     setVehicleManualMode(false)
 
-    setFicheUrl(backendForm?.ficheUrl ?? null)
-    setStep(backendForm?.ficheUrl ? 'SIGNED_FICHE' : 'FORM')
+    setFicheUrl(nextFicheUrl)
+    setStep(nextStep)
     setSelectedFile(null)
     setPreviewError('')
-  }, [taskQuery.data])
-
-  /** After task load, “Ajouter une fiche” from the list (nonce > 0) opens the formulaire step. */
-  useEffect(() => {
-    if (!open || !taskQuery.data || isAdmin || taskFormIntentNonce === 0) return
-    setStep('FORM')
-  }, [taskFormIntentNonce, taskQuery.data, open, isAdmin])
+  }, [taskQuery.data, taskId, isAdmin, currentUserId, installerDefaultName, taskFormIntentNonce])
 
   const initialEdit = useMemo(() => {
     const t = taskQuery.data?.task
@@ -477,6 +515,40 @@ export function TaskDetailDrawer({
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
+  /** Local cache so technicians can leave and resume a partially filled fiche (same device / browser). */
+  useEffect(() => {
+    if (!open || isAdmin || !currentUserId) return
+    if (!taskQuery.data?.task || taskQuery.data.task.id !== taskId) return
+    const assignments = taskQuery.data.assignments ?? []
+    if (!assignments.some((a) => a.technicianId === currentUserId)) return
+
+    const taskUpdatedAt = taskQuery.data.task.updatedAt
+    const t = window.setTimeout(() => {
+      if (Date.now() < suppressDraftSaveUntilRef.current) return
+      const snap = JSON.stringify({ form, step, ficheUrl: ficheUrl ?? null })
+      if (snap === formDraftBaselineRef.current) return
+      saveTaskFormDraft(currentUserId, taskId, {
+        form,
+        step,
+        ficheUrl: ficheUrl ?? undefined,
+        serverTaskUpdatedAt: taskUpdatedAt,
+        userEdited: true,
+      })
+    }, 500)
+    return () => window.clearTimeout(t)
+  }, [
+    open,
+    isAdmin,
+    currentUserId,
+    taskId,
+    form,
+    step,
+    ficheUrl,
+    taskQuery.data?.task?.id,
+    taskQuery.data?.task?.updatedAt,
+    taskQuery.data?.assignments,
+  ])
+
   const handleSubmitForm = async () => {
     if (!taskQuery.data) return
     setSubmitError('')
@@ -529,6 +601,7 @@ export function TaskDetailDrawer({
       void queryClient.invalidateQueries({ queryKey: ['tasks'] })
       void queryClient.invalidateQueries({ queryKey: ['task', taskId] })
       onTaskUpdated?.(taskId)
+      if (currentUserId) clearTaskFormDraft(currentUserId, taskId)
       onClose()
     } catch (e: any) {
       const backendMsg =
@@ -652,7 +725,7 @@ export function TaskDetailDrawer({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full border border-slate-300 bg-white px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-900">
-                {taskQuery.data?.task?.client ?? 'Task'}
+                {taskQuery.data?.task?.client ?? t('drawer.task')}
               </span>
               <span className="rounded-full border border-slate-300 bg-white px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-900">
                 {Number.isFinite(taskQuery.data?.task?.numberOfInstallations as any)
@@ -682,7 +755,7 @@ export function TaskDetailDrawer({
                   >
                     1
                   </span>
-                  <span className="truncate">Fiche</span>
+                  <span className="truncate">{t('drawer.stepForm')}</span>
                 </div>
                 <div className="h-px w-6 shrink-0 bg-slate-300" aria-hidden />
                 <div
@@ -699,12 +772,13 @@ export function TaskDetailDrawer({
                   >
                     2
                   </span>
-                  <span className="truncate">Fiche signée</span>
+                  <span className="truncate">{t('drawer.stepSigned')}</span>
                 </div>
               </div>
             ) : (
               <p className="mt-1 text-xs text-slate-600">
-                Step {step === 'FORM' ? '1/2' : '2/2'}: {step === 'FORM' ? 'Fill the correct form' : 'Upload signed fiche'}
+                {t('drawer.adminStep')} {step === 'FORM' ? '1/2' : '2/2'}:{' '}
+                {step === 'FORM' ? t('drawer.fillForm') : t('drawer.uploadSigned')}
               </p>
             )}
           </div>
@@ -713,7 +787,7 @@ export function TaskDetailDrawer({
             className="rounded-lg p-2 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
             onClick={onClose}
           >
-            <span className="sr-only">Fermer</span>
+            <span className="sr-only">{t('drawer.close')}</span>
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -723,13 +797,13 @@ export function TaskDetailDrawer({
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {taskQuery.isLoading && (
             <div className="rounded-xl border border-slate-300 bg-white/60 p-6 text-sm text-slate-700">
-              Loading task…
+              {t('drawer.loading')}
             </div>
           )}
 
           {taskQuery.isError && (
             <div className="rounded-xl border border-rose-300 bg-rose-50 p-6 text-sm text-rose-700">
-              Failed to load task.
+              {t('drawer.loadError')}
             </div>
           )}
 
@@ -738,12 +812,12 @@ export function TaskDetailDrawer({
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white p-4">
                 <div className="space-y-1">
                   <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
-                    Assigned technicians
+                    {t('drawer.assignedTech')}
                   </p>
                   <p className="text-sm font-semibold text-slate-900">{assignedTechnicianNames}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-600">Actions</span>
+                  <span className="text-xs text-slate-600">{t('drawer.actions')}</span>
                   {isAdmin && !isFinalizedTask ? (
                     <button
                       type="button"
@@ -1708,23 +1782,34 @@ export function TaskDetailDrawer({
                       {/* moved Observations/Installateur/Date to SIGNED_FICHE step */}
                   </div>
 
-                  <div className="mt-6 flex flex-col gap-3 border-t border-slate-300 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="mt-6 space-y-3 border-t border-slate-300 pt-4">
+                    <p className="text-xs leading-relaxed text-slate-500">{t('draft.autosaveHint')}</p>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <button
                       type="button"
                       className="order-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:order-1"
                       onClick={() => {
                         const taskClient = taskQuery.data?.task?.client ?? ''
-                        setForm({
+                        const cleared: InterventionForm = {
                           ...DEFAULT_FORM,
                           client: taskClient,
                           year: getLocalCurrentYearString(),
                           date: getLocalTodayInputValue(),
                           installerName: installerDefaultName,
+                        }
+                        setForm(cleared)
+                        setStep('FORM')
+                        formDraftBaselineRef.current = JSON.stringify({
+                          form: cleared,
+                          step: 'FORM' as Step,
+                          ficheUrl: null,
                         })
                         setSelectedClientId(null)
                         setImmatSearch('')
                         setImmatDropdownOpen(false)
                         setSelectedFile(null)
+                        suppressDraftSaveUntilRef.current = Date.now() + 900
+                        if (currentUserId) clearTaskFormDraft(currentUserId, taskId)
                       }}
                     >
                       Effacer le brouillon
@@ -1737,6 +1822,7 @@ export function TaskDetailDrawer({
                     >
                       Continuer vers la fiche signée
                     </button>
+                    </div>
                   </div>
                 </div>
               )}

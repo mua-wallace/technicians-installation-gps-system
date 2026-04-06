@@ -1,5 +1,6 @@
 import { Fragment, useState, type ReactNode } from 'react'
 import { filterFormsForViewer, type TaskFormInstallation, type TaskListItem } from '../../api/tasks'
+import { useI18n } from '../../i18n/I18nContext'
 import { SubmittedFormViewerModal } from './SubmittedFormViewerModal'
 
 function getTechnicianDisplayName(task: TaskListItem): string {
@@ -37,6 +38,10 @@ type Props = {
   loading?: boolean
   onSelectTask: (taskId: string) => void
   title?: string
+  /** Shown under the title when filtering (e.g. technician bucket). */
+  subtitle?: string
+  /** Hide task status (CREATED / ASSIGNED / …) filter — e.g. when using technician bucket cards. */
+  showTaskStatusFilter?: boolean
   search: string
   onSearchChange: (next: string) => void
   typeFilter: string
@@ -57,6 +62,8 @@ export function TaskList({
   loading,
   onSelectTask,
   title = 'My tasks',
+  subtitle,
+  showTaskStatusFilter = true,
   search,
   onSearchChange,
   typeFilter,
@@ -69,6 +76,7 @@ export function TaskList({
   viewerUsername,
   onAddFormForTask,
 }: Props) {
+  const { t } = useI18n()
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const [viewerForm, setViewerForm] = useState<{ form: TaskFormInstallation; taskLabel: string } | null>(null)
 
@@ -83,17 +91,26 @@ export function TaskList({
         onClose={() => setViewerForm(null)}
         taskLabel={viewerForm?.taskLabel}
       />
-      <div className="shrink-0 mb-3 flex items-center justify-between gap-2">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-slate-700">{title}</h2>
-        <span className="text-xs text-slate-500">
-          {loading ? 'Loading…' : `${tasks.length} task${tasks.length === 1 ? '' : 's'}`}
+      <div className="shrink-0 mb-3 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+        <div>
+          <h2 className="text-sm font-medium uppercase tracking-wide text-slate-700">{title}</h2>
+          {subtitle ? (
+            <p className="mt-1 text-xs leading-snug text-slate-600">{subtitle}</p>
+          ) : null}
+        </div>
+        <span className="shrink-0 text-xs text-slate-500 sm:pt-0.5">
+          {loading
+            ? t('taskList.loading')
+            : `${tasks.length} ${tasks.length === 1 ? t('taskApp.taskCount') : t('taskApp.taskCountPlural')}`}
         </span>
       </div>
 
-      <div className="mb-3 grid gap-2 sm:grid-cols-3">
+      <div
+        className={`mb-3 grid gap-2 ${showTaskStatusFilter ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}
+      >
         <input
           className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-600"
-          placeholder="Search client / technicians"
+          placeholder={t('taskList.searchPlaceholder')}
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
         />
@@ -103,23 +120,25 @@ export function TaskList({
           value={typeFilter}
           onChange={(e) => onTypeFilterChange(e.target.value)}
         >
-          <option value="">All types</option>
-          <option value="INSTALLATION">Installation</option>
-          <option value="INTERVENTION">Intervention</option>
+          <option value="">{t('taskList.filter.typesAll')}</option>
+          <option value="INSTALLATION">{t('taskList.filter.typeInstallation')}</option>
+          <option value="INTERVENTION">{t('taskList.filter.typeIntervention')}</option>
         </select>
 
-        <select
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-600"
-          value={statusFilter}
-          onChange={(e) => onStatusFilterChange(e.target.value)}
-        >
-          <option value="">All statuses</option>
-          <option value="CREATED">CREATED</option>
-          <option value="ASSIGNED">ASSIGNED</option>
-          <option value="IN_PROGRESS">IN_PROGRESS</option>
-          <option value="COMPLETED">COMPLETED</option>
-          <option value="VERIFIED">VERIFIED</option>
-        </select>
+        {showTaskStatusFilter ? (
+          <select
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-600"
+            value={statusFilter}
+            onChange={(e) => onStatusFilterChange(e.target.value)}
+          >
+            <option value="">{t('taskList.filter.statusAll')}</option>
+            <option value="CREATED">CREATED</option>
+            <option value="ASSIGNED">ASSIGNED</option>
+            <option value="IN_PROGRESS">IN_PROGRESS</option>
+            <option value="COMPLETED">COMPLETED</option>
+            <option value="VERIFIED">VERIFIED</option>
+          </select>
+        ) : null}
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
@@ -127,15 +146,15 @@ export function TaskList({
           <table className="w-full min-w-[880px] border-collapse text-xs text-slate-700">
             <thead>
               <tr className="bg-slate-50 text-left uppercase tracking-wide text-[11px] text-slate-500">
-                <th className="border-b border-slate-200 px-3 py-2 text-start">Client</th>
-                <th className="border-b border-slate-200 px-3 py-2 text-center">Type</th>
-                <th className="border-b border-slate-200 px-3 py-2 text-center">Technicians</th>
+                <th className="border-b border-slate-200 px-3 py-2 text-start">{t('taskList.col.client')}</th>
+                <th className="border-b border-slate-200 px-3 py-2 text-center">{t('taskList.col.type')}</th>
+                <th className="border-b border-slate-200 px-3 py-2 text-center">{t('taskList.col.technicians')}</th>
                 <th className="border-b border-slate-200 px-3 py-2 text-center whitespace-normal break-words leading-tight max-w-36">
-                  Soumis / prévu
+                  {t('taskList.col.submittedPlanned')}
                 </th>
-                <th className="border-b border-slate-200 px-3 py-2 text-center">Schedule</th>
-                <th className="border-b border-slate-200 px-3 py-2 text-center">Status</th>
-                <th className="w-0 border-b border-slate-200 py-2 pl-1 pr-2 text-right">Details</th>
+                <th className="border-b border-slate-200 px-3 py-2 text-center">{t('taskList.col.schedule')}</th>
+                <th className="border-b border-slate-200 px-3 py-2 text-center">{t('taskList.col.status')}</th>
+                <th className="w-0 border-b border-slate-200 py-2 pl-1 pr-2 text-right">{t('taskList.col.details')}</th>
               </tr>
             </thead>
             <tbody>
@@ -166,10 +185,10 @@ export function TaskList({
                         type="button"
                         onClick={() => toggleRow(task.id)}
                         className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                        title={isOpen ? 'Masquer les fiches' : 'Voir immatriculation, châssis, installateur, date'}
+                        title={isOpen ? t('taskList.expand.hideForms') : t('taskList.expand.showForms')}
                         aria-expanded={isOpen}
                       >
-                        <span className="sr-only">{isOpen ? 'Replier' : 'Déplier'}</span>
+                        <span className="sr-only">{isOpen ? t('taskList.expand.hideForms') : t('taskList.expand.showForms')}</span>
                         <svg
                           className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
                           fill="none"
@@ -202,7 +221,7 @@ export function TaskList({
                         {submitted} / {planned}
                       </span>
                       <span className="text-[10px] font-normal uppercase tracking-wide text-slate-500">
-                        {viewerIsAdmin ? 'toutes' : 'mes fiches'}
+                        {viewerIsAdmin ? t('taskList.formsAll') : t('taskList.formsMine')}
                       </span>
                     </span>
                   </td>
@@ -229,9 +248,9 @@ export function TaskList({
                       type="button"
                       className="rounded p-1.5 text-slate-500 hover:bg-sky-600/20 hover:text-sky-700"
                       onClick={() => onSelectTask(task.id)}
-                      title="Voir détail"
+                      title={t('taskList.viewDetail')}
                     >
-                      <span className="sr-only">Voir détail</span>
+                      <span className="sr-only">{t('taskList.viewDetail')}</span>
                       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path
                           strokeLinecap="round"
@@ -265,16 +284,14 @@ export function TaskList({
                               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                               </svg>
-                              Ajouter une fiche
+                              {t('taskList.addFiche')}
                             </button>
-                            <span className="text-xs text-slate-500">Ouvre le formulaire pour cette tâche.</span>
+                            <span className="text-xs text-slate-500">{t('taskList.addFicheHint')}</span>
                           </div>
                         ) : null}
                         {formsSorted.length === 0 ? (
                           <p className="text-center text-sm text-slate-500">
-                            {viewerIsAdmin
-                              ? 'No fiche submitted yet.'
-                              : "You haven't submitted any fiche for this task."}
+                            {viewerIsAdmin ? t('taskList.noFiche.admin') : t('taskList.noFiche.tech')}
                           </p>
                         ) : (
                           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
@@ -282,11 +299,11 @@ export function TaskList({
                               <thead>
                                 <tr className="bg-slate-100 text-[11px] uppercase tracking-wide text-slate-600">
                                   <th className="border-b border-slate-200 px-3 py-2 text-left">#</th>
-                                  <th className="border-b border-slate-200 px-3 py-2 text-left">Immatriculation</th>
-                                  <th className="border-b border-slate-200 px-3 py-2 text-left">Châssis</th>
-                                  <th className="border-b border-slate-200 px-3 py-2 text-left">Installateur</th>
-                                  <th className="border-b border-slate-200 px-3 py-2 text-left">Date</th>
-                                  <th className="border-b border-slate-200 px-3 py-2 text-center">Voir</th>
+                                  <th className="border-b border-slate-200 px-3 py-2 text-left">{t('taskList.table.plate')}</th>
+                                  <th className="border-b border-slate-200 px-3 py-2 text-left">{t('taskList.table.chassis')}</th>
+                                  <th className="border-b border-slate-200 px-3 py-2 text-left">{t('taskList.table.installer')}</th>
+                                  <th className="border-b border-slate-200 px-3 py-2 text-left">{t('taskList.table.date')}</th>
+                                  <th className="border-b border-slate-200 px-3 py-2 text-center">{t('taskList.table.view')}</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -316,7 +333,7 @@ export function TaskList({
                                         }
                                         className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-800 hover:bg-slate-50"
                                       >
-                                        Voir
+                                        {t('taskList.table.view')}
                                       </button>
                                     </td>
                                   </tr>
@@ -330,7 +347,7 @@ export function TaskList({
                           onClick={() => setOpenTaskId(null)}
                           className="mt-2 text-xs font-medium text-sky-700 hover:underline"
                         >
-                          Fermer
+                          {t('taskList.closeRow')}
                         </button>
                       </td>
                     </tr>
@@ -345,7 +362,7 @@ export function TaskList({
                     colSpan={7}
                     className="border-b border-slate-200 px-3 py-8 text-center text-sm text-slate-500"
                   >
-                    No tasks found.
+                    {t('taskList.noTasks')}
                   </td>
                 </tr>
               ) : null}

@@ -1,15 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { authApi } from '../api/auth'
 import { usersApi } from '../api/users'
+import { LanguageSwitch } from '../components/ui/LanguageSwitch'
+import { useI18n } from '../i18n/I18nContext'
 import { useAuthStore } from '../store/auth.store'
 
 function classNames(...parts: Array<string | false | undefined | null>) {
   return parts.filter(Boolean).join(' ')
 }
 
-function BrandMark() {
+function BrandMark({ subtitle }: { subtitle: string }) {
   return (
     <div className="flex items-center gap-3">
       <div className="grid h-10 w-10 place-items-center rounded-xl bg-sky-600/10 ring-1 ring-sky-600/25">
@@ -24,7 +26,7 @@ function BrandMark() {
       </div>
       <div className="leading-tight">
         <p className="text-sm font-semibold text-slate-900">malambi</p>
-        <p className="text-xs text-slate-500">Technician Installation App</p>
+        <p className="text-xs text-slate-500">{subtitle}</p>
       </div>
     </div>
   )
@@ -37,6 +39,11 @@ function getApiDisplayUrl(): string {
 
 export default function Login() {
   const navigate = useNavigate()
+  const { t } = useI18n()
+  const tRef = useRef(t)
+  useEffect(() => {
+    tRef.current = t
+  }, [t])
   const setAuth = useAuthStore((s) => s.setAuth)
   const setProfile = useAuthStore((s) => s.setProfile)
 
@@ -63,7 +70,7 @@ export default function Login() {
     onError: (err: any) => {
       const message = err?.response?.data?.message ?? err?.message ?? 'Login failed'
       if (err?.message === 'Network Error' || err?.code === 'ERR_NETWORK') {
-        setError('Cannot reach the server. Check API URL, HTTPS/mixed-content, and CORS.')
+        setError(tRef.current('login.error.network'))
       } else {
         setError(message)
       }
@@ -84,31 +91,29 @@ export default function Login() {
         <div className="absolute -bottom-56 right-[-180px] h-[760px] w-[760px] rounded-full bg-emerald-500/10 blur-3xl" />
       </div>
 
+      <div className="absolute right-4 top-4 z-20">
+        <LanguageSwitch />
+      </div>
+
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-10">
         <div className="grid w-full grid-cols-1 gap-10 lg:grid-cols-2 lg:gap-14">
           <div className="hidden lg:flex lg:flex-col lg:justify-center">
-            <BrandMark />
-            <h1 className="mt-8 text-4xl font-semibold tracking-tight text-slate-900">
-              Log in to start your next installation
-            </h1>
-            <p className="mt-3 max-w-md text-sm leading-6 text-slate-600">
-              Fast access to your technician dashboard, intervention history, and forms—secured with token refresh.
-            </p>
+            <BrandMark subtitle={t('login.brandSubtitle')} />
+            <h1 className="mt-8 text-4xl font-semibold tracking-tight text-slate-900">{t('login.heroTitle')}</h1>
+            <p className="mt-3 max-w-md text-sm leading-6 text-slate-600">{t('login.heroBody')}</p>
 
             <div className="mt-8 grid max-w-md gap-3 rounded-2xl border border-slate-200 bg-white p-5">
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 h-2 w-2 rounded-full bg-emerald-500" />
-                <p className="text-sm text-slate-700">
-                  Automatic token refresh on <span className="font-medium text-slate-900">401</span>
-                </p>
+                <p className="text-sm text-slate-700">{t('login.bullet401')}</p>
               </div>
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 h-2 w-2 rounded-full bg-sky-500" />
-                <p className="text-sm text-slate-700">Protected routes for the technician workspace</p>
+                <p className="text-sm text-slate-700">{t('login.bulletRoutes')}</p>
               </div>
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 h-2 w-2 rounded-full bg-violet-500" />
-                <p className="text-sm text-slate-700">Lightweight state with Zustand</p>
+                <p className="text-sm text-slate-700">{t('login.bulletState')}</p>
               </div>
             </div>
           </div>
@@ -116,17 +121,15 @@ export default function Login() {
           <div className="flex items-center justify-center lg:justify-end">
             <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex items-center justify-between gap-4">
-                <BrandMark />
+                <BrandMark subtitle={t('login.brandSubtitle')} />
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
-                  Secure login
+                  {t('login.secureBadge')}
                 </span>
               </div>
 
-              <h2 className="mt-6 text-xl font-semibold text-slate-900">Welcome back</h2>
-              <p className="mt-1 text-sm text-slate-600">Enter your username and password to continue.</p>
-              <p className="mt-2 text-xs text-slate-500">
-                Use your <span className="font-medium text-slate-700">Malambi</span> credentials to sign in.
-              </p>
+              <h2 className="mt-6 text-xl font-semibold text-slate-900">{t('login.welcome')}</h2>
+              <p className="mt-1 text-sm text-slate-600">{t('login.instructions')}</p>
+              <p className="mt-2 text-xs text-slate-500">{t('login.credentialsHint')}</p>
 
               {error ? (
                 <div className="mt-5 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -136,7 +139,7 @@ export default function Login() {
 
               <form className="mt-6 space-y-4" onSubmit={onSubmit}>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">Username</label>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">{t('login.username')}</label>
                   <input
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
@@ -148,7 +151,7 @@ export default function Login() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">Password</label>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">{t('login.password')}</label>
                   <div className="relative">
                     <input
                       type={showPassword ? 'text' : 'password'}
@@ -165,7 +168,7 @@ export default function Login() {
                       onClick={() => setShowPassword((s) => !s)}
                       disabled={loginMutation.isPending}
                     >
-                      {showPassword ? 'Hide' : 'Show'}
+                      {showPassword ? t('login.hide') : t('login.show')}
                     </button>
                   </div>
                 </div>
@@ -180,11 +183,11 @@ export default function Login() {
                       : 'bg-sky-600 hover:bg-sky-700',
                   )}
                 >
-                  {loginMutation.isPending ? 'Logging in…' : 'Login'}
+                  {loginMutation.isPending ? t('login.submitting') : t('login.submit')}
                 </button>
 
                 <p className="text-center text-xs text-slate-500">
-                  API: <span className="font-medium text-slate-700">{apiDisplayUrl}</span>
+                  {t('login.apiLabel')} <span className="font-medium text-slate-700">{apiDisplayUrl}</span>
                 </p>
               </form>
             </div>
@@ -194,4 +197,3 @@ export default function Login() {
     </div>
   )
 }
-

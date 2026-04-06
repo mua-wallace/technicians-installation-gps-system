@@ -41,6 +41,10 @@ export type TaskFormInstallation = {
   /** Prefer for filtering “my submissions” when present */
   submittedByTechnicianId?: number | null
   createdByTechnicianId?: number | null
+  /** When the API sends review workflow fields (camelCase or snake_case). */
+  reviewStatus?: string | null
+  validationStatus?: string | null
+  formStatus?: string | null
 }
 
 /** Backend may send snake_case keys; read camelCase or snake_case from a form JSON object. */
@@ -101,6 +105,90 @@ export function filterFormsForViewer(
       (!!un && (ins.includes(un) || un.includes(ins)))
     )
   })
+}
+
+/**
+ * Technician list grouping.
+ * - draft: local cached partial form (browser) — see `taskHasLocalFormDraft` in `taskFormDraftStorage`
+ * - open: assigned work not finished on the server, no local draft (only listed under “All”)
+ */
+export type TechnicianTaskBucket = 'draft' | 'submitted' | 'rejected' | 'validated' | 'open'
+
+function normalizeReviewToken(value: unknown): string {
+  if (value == null || value === '') return ''
+  return String(value).trim().toLowerCase()
+}
+
+/** Best-effort read of API review state on a form row. */
+export function getFormReviewStatusToken(form: TaskFormInstallation): string {
+  const raw = form as Record<string, unknown>
+  const candidates = [
+    readTaskFormField(raw, 'reviewStatus'),
+    readTaskFormField(raw, 'validationStatus'),
+    readTaskFormField(raw, 'formStatus'),
+    readTaskFormField(raw, 'status'),
+    form.reviewStatus,
+    form.validationStatus,
+    form.formStatus,
+  ]
+  for (const c of candidates) {
+    const t = normalizeReviewToken(c)
+    if (t) return t
+  }
+  return ''
+}
+
+export function formLooksRejected(form: TaskFormInstallation): boolean {
+  const t = getFormReviewStatusToken(form)
+  return (
+    t.includes('reject') ||
+    t.includes('refus') ||
+    t === 'rejected' ||
+    t === 'refused' ||
+    t === 'declined'
+  )
+}
+
+/**
+ * Classifies a task for the technician dashboard sidebar.
+ * - validated: task verified by office
+ * - rejected: at least one of the technician’s fiches is marked rejected (when API sends status)
+ * - draft: has a user-edited local draft (`hasLocalFormDraft` from caller)
+ * - submitted: all planned fiches sent, still awaiting verification
+ * - open: not all fiches on the server yet and no local draft (shown under “All” only)
+ */
+export function getTechnicianTaskBucket(
+  task: TaskListItem,
+  opts: {
+    technicianId: number | null
+    fullname?: string | null
+    username?: string | null
+    /** From `taskHasLocalFormDraft` — partial form cached in the browser for this task. */
+    hasLocalFormDraft?: boolean
+  },
+): TechnicianTaskBucket {
+  const visibleForms = filterFormsForViewer(task.forms, {
+    isAdmin: false,
+    technicianId: opts.technicianId,
+    fullname: opts.fullname,
+    username: opts.username,
+  })
+  const planned = Math.max(1, Number(task.numberOfInstallations) || 1)
+
+  if (task.status === 'VERIFIED') return 'validated'
+
+  if (visibleForms.some(formLooksRejected)) return 'rejected'
+
+  if (opts.hasLocalFormDraft) return 'draft'
+
+  if (visibleForms.length < planned) return 'open'
+
+  return 'submitted'
+}
+
+export function isTaskAssignedToTechnician(task: TaskListItem, technicianId: number | null): boolean {
+  if (technicianId == null) return false
+  return (task.assignments ?? []).some((a) => a.technicianId === technicianId)
 }
 
 /** Create: POST `/tasks/installation-form` or `/tasks/intervention-form` with `taskId` in JSON (per API). */

@@ -1,11 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { tasksApi, type TaskListItem, type TaskStatus, type TaskType } from './api/tasks'
+import {
+  tasksApi,
+  type TaskListItem,
+  type TaskStatus,
+  type TaskType,
+  getTechnicianTaskBucket,
+  isTaskAssignedToTechnician,
+  type TechnicianTaskBucket,
+} from './api/tasks'
 import { usersApi } from './api/users'
 import type { ClientRow } from './api/users'
 import { useAuthStore } from './store/auth.store'
 import { TaskDetailDrawer } from './components/tasks/TaskDetailDrawer'
 import { TaskList } from './components/tasks/TaskList'
+import { LanguageSwitch } from './components/ui/LanguageSwitch'
+import { useI18n } from './i18n/I18nContext'
+import { taskHasLocalFormDraft } from './lib/taskFormDraftStorage'
+import {
+  TechnicianTaskBucketsNav,
+  TechnicianTaskBucketsStrip,
+  type TechnicianBucketSelection,
+} from './components/tasks/TechnicianTaskBucketsNav'
 
 function getClientLabel(c: ClientRow): string {
   return String(c.name ?? c.fullname ?? c.company ?? c.username ?? '').trim()
@@ -40,6 +56,7 @@ function datetimeLocalToIso(value: string): string | undefined {
 
 export function TaskApp() {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
 
   const authUser = useAuthStore((s) => s.user)
   const profile = useAuthStore((s) => s.profile)
@@ -62,10 +79,10 @@ export function TaskApp() {
   const roleLower = (profile?.role ?? '').toLowerCase()
   const isAdmin = roleLower.includes('admin') || roleLower.includes('supervisor')
   const roleLabel = useMemo(() => {
-    if (roleLower.includes('admin')) return 'Admin'
-    if (roleLower.includes('supervisor')) return 'Supervisor'
-    return 'Technician'
-  }, [roleLower])
+    if (roleLower.includes('admin')) return t('role.admin')
+    if (roleLower.includes('supervisor')) return t('role.supervisor')
+    return t('role.technician')
+  }, [roleLower, t])
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   /** Bumped when a technician opens “Ajouter une fiche” from the list so the drawer starts on the form step. */
@@ -74,14 +91,15 @@ export function TaskApp() {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<TaskType | ''>('')
   const [statusFilter, setStatusFilter] = useState<TaskStatus | ''>('')
+  const [technicianBucketFilter, setTechnicianBucketFilter] = useState<TechnicianBucketSelection>('all')
 
   const tasksQuery = useQuery({
-    queryKey: ['tasks', 'submitted', { typeFilter, statusFilter }],
+    queryKey: ['tasks', 'submitted', { typeFilter, statusFilter: isAdmin ? statusFilter : '' }],
     queryFn: () =>
       tasksApi.listTasksSubmitted({
         page: 1,
         limit: 200,
-        status: statusFilter || undefined,
+        status: isAdmin ? statusFilter || undefined : undefined,
         type: typeFilter || undefined,
         search: undefined,
         include: 'assignments,technicians,forms',
@@ -97,15 +115,72 @@ export function TaskApp() {
     setTaskFormIntentNonce((n) => n + 1)
   }
 
+  const tasksFromApi: TaskListItem[] = tasksQuery.data?.data ?? []
+
+  const technicianAssignedTasks = useMemo(() => {
+    if (isAdmin) return []
+    if (myUserId == null) return []
+    return tasksFromApi.filter((t) => isTaskAssignedToTechnician(t, myUserId))
+  }, [tasksFromApi, isAdmin, myUserId])
+
+  const technicianBucketCounts = useMemo(() => {
+    const base: Record<TechnicianBucketSelection, number> = {
+      all: 0,
+      draft: 0,
+      submitted: 0,
+      rejected: 0,
+      validated: 0,
+    }
+    if (isAdmin || myUserId == null) return base
+    for (const t of technicianAssignedTasks) {
+      base.all += 1
+      const hasLocal = taskHasLocalFormDraft(myUserId, t.id)
+      const b = getTechnicianTaskBucket(t, {
+        technicianId: myUserId,
+        fullname: profile?.fullname ?? null,
+        username: profile?.username ?? null,
+        hasLocalFormDraft: hasLocal,
+      })
+      if (b !== 'open') {
+        base[b] += 1
+      }
+    }
+    return base
+  }, [isAdmin, myUserId, technicianAssignedTasks, profile?.fullname, profile?.username])
+
+  const technicianListSubtitle = useMemo(() => {
+    if (isAdmin || technicianBucketFilter === 'all') return undefined
+    const labels: Record<Exclude<TechnicianTaskBucket, 'open'>, string> = {
+      draft: t('taskApp.subtitle.draft'),
+      submitted: t('taskApp.subtitle.submitted'),
+      rejected: t('taskApp.subtitle.rejected'),
+      validated: t('taskApp.subtitle.validated'),
+    }
+    return labels[technicianBucketFilter]
+  }, [isAdmin, technicianBucketFilter, t])
+
   const tasksForUI = useMemo(() => {
-    const tasks: TaskListItem[] = tasksQuery.data?.data ?? []
-    // Show every task returned by GET /tasks/submitted (including `forms: []` and unassigned).
-    const scoped = tasks
+    const scoped = isAdmin ? tasksFromApi : technicianAssignedTasks
+
+    let afterBucket = scoped
+    if (!isAdmin && technicianBucketFilter !== 'all' && myUserId != null) {
+      afterBucket = scoped.filter((t) => {
+        const hasLocal = taskHasLocalFormDraft(myUserId, t.id)
+        return (
+          getTechnicianTaskBucket(t, {
+            technicianId: myUserId,
+            fullname: profile?.fullname ?? null,
+            username: profile?.username ?? null,
+            hasLocalFormDraft: hasLocal,
+          }) === technicianBucketFilter
+        )
+      })
+    }
 
     const q = search.trim().toLowerCase()
     const filtered = !q
-      ? scoped
-      : scoped.filter((t) => {
+      ? afterBucket
+      : afterBucket.filter((t) => {
           const scheduled = t.scheduledDate ? new Date(t.scheduledDate).toLocaleDateString() : ''
           const technicians =
             (t.assignments ?? [])
@@ -136,7 +211,16 @@ export function TaskApp() {
       const bMs = bKey ? new Date(bKey).getTime() : 0
       return bMs - aMs
     })
-  }, [tasksQuery.data, search])
+  }, [
+    tasksFromApi,
+    technicianAssignedTasks,
+    isAdmin,
+    search,
+    technicianBucketFilter,
+    myUserId,
+    profile?.fullname,
+    profile?.username,
+  ])
 
   // Admin create/assign (minimal wiring; technicians must be entered by ID)
   const [adminModalOpen, setAdminModalOpen] = useState(false)
@@ -286,15 +370,16 @@ export function TaskApp() {
         <header className="flex shrink-0 flex-col gap-4 border-b border-slate-200 bg-white py-4 md:h-20 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wider text-sky-600">Malambi</p>
-            <h1 className="mt-0.5 text-2xl font-semibold tracking-tight text-sky-700">Tableau de bord</h1>
-            <p className="text-sm text-slate-500">Tâches, fiches et validation</p>
+            <h1 className="mt-0.5 text-2xl font-semibold tracking-tight text-sky-700">{t('taskApp.dashboard')}</h1>
+            <p className="text-sm text-slate-500">{t('taskApp.tagline')}</p>
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+            <LanguageSwitch size="sm" className="order-first sm:order-none" />
             <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white/80 px-3 py-1.5 text-xs text-slate-700">
                 <span className="text-slate-600">{roleLabel}:</span>
                 <span className="min-w-0 truncate font-medium text-slate-900">{displayName}</span>
-                {meQuery.isFetching ? <span className="text-slate-600">(sync…)</span> : null}
+                {meQuery.isFetching ? <span className="text-slate-600">{t('taskApp.syncing')}</span> : null}
             </div>
 
             <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-3">
@@ -307,7 +392,7 @@ export function TaskApp() {
                     setAdminModalOpen(true)
                   }}
                 >
-                  Create Task
+                  {t('taskApp.createTask')}
                 </button>
               ) : null}
 
@@ -319,29 +404,49 @@ export function TaskApp() {
                   window.location.href = '/login'
                 }}
               >
-                Logout
+                {t('taskApp.logout')}
               </button>
             </div>
           </div>
         </header>
 
         <main className="flex min-h-0 flex-1 gap-4 py-4 lg:gap-6 lg:flex">
-          <aside className="hidden w-56 shrink-0 space-y-4 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-700 lg:block">
-            <div>
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">Overview</p>
-              <p className="text-sm font-medium text-slate-900">
-                {tasksForUI.length} task{tasksForUI.length === 1 ? '' : 's'}
-              </p>
-              <p className="mt-1 text-[11px] text-slate-500">Includes tasks with or without submitted fiches.</p>
-            </div>
+          <aside className="hidden w-64 shrink-0 overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-700 lg:block">
+            {isAdmin ? (
+              <div>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">{t('taskApp.overview')}</p>
+                <p className="text-sm font-medium text-slate-900">
+                  {tasksForUI.length}{' '}
+                  {tasksForUI.length === 1 ? t('taskApp.taskCount') : t('taskApp.taskCountPlural')}
+                </p>
+                <p className="mt-1 text-[11px] text-slate-500">{t('taskApp.overviewHint')}</p>
+              </div>
+            ) : (
+              <TechnicianTaskBucketsNav
+                counts={technicianBucketCounts}
+                value={technicianBucketFilter}
+                onChange={setTechnicianBucketFilter}
+              />
+            )}
           </aside>
 
           <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+            {!isAdmin ? (
+              <div className="shrink-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                <TechnicianTaskBucketsStrip
+                  counts={technicianBucketCounts}
+                  value={technicianBucketFilter}
+                  onChange={setTechnicianBucketFilter}
+                />
+              </div>
+            ) : null}
             <TaskList
               tasks={tasksForUI}
               loading={tasksQuery.isLoading}
               onSelectTask={(id) => setSelectedTaskId(id)}
-              title={isAdmin ? 'All tasks' : 'My tasks'}
+              title={isAdmin ? t('taskList.title.all') : t('taskList.title.mine')}
+              subtitle={technicianListSubtitle}
+              showTaskStatusFilter={isAdmin}
               search={search}
               onSearchChange={setSearch}
               typeFilter={typeFilter}
@@ -388,19 +493,15 @@ export function TaskApp() {
           <div className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
-                  Create task
-                </p>
-                <p className="text-[11px] text-slate-500">
-                  Fill the task details first, then (optionally) assign technicians. Required fields are marked *.
-                </p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">{t('adminModal.createTitle')}</p>
+                <p className="text-[11px] text-slate-500">{t('adminModal.createHint')}</p>
               </div>
               <button
                 type="button"
                 className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
                 onClick={() => setAdminModalOpen(false)}
               >
-                Close
+                {t('adminModal.close')}
               </button>
             </div>
 
@@ -413,18 +514,18 @@ export function TaskApp() {
                 ) : null}
                 {adminCreatedTaskId ? (
                   <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-                    Last created task ID: <span className="font-semibold">{adminCreatedTaskId}</span>
+                    {t('adminModal.lastCreated')} <span className="font-semibold">{adminCreatedTaskId}</span>
                   </p>
                 ) : null}
 
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">Task details</p>
-                  <p className="mt-1 text-[11px] text-slate-500">Who, what device, how many, and when.</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">{t('adminModal.section.taskDetails')}</p>
+                  <p className="mt-1 text-[11px] text-slate-500">{t('adminModal.section.taskDetailsHint')}</p>
 
                   <div className="mt-4 space-y-4">
                     <div>
                       <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        Client <span className="text-rose-600">*</span>
+                        {t('adminModal.client')} <span className="text-rose-600">*</span>
                       </label>
                       <div className="relative">
                         <input
@@ -445,12 +546,14 @@ export function TaskApp() {
                           onBlur={() => {
                             setTimeout(() => setAdminClientDropdownOpen(false), 120)
                           }}
-                          placeholder={clientsQuery.isLoading ? 'Loading clients…' : 'Select a client or type a new name'}
+                          placeholder={
+                            clientsQuery.isLoading ? t('adminModal.loadingClients') : t('adminModal.clientPlaceholder')
+                          }
                         />
                         {adminClientDropdownOpen ? (
                           <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
                             {clientsQuery.isLoading ? (
-                              <div className="px-3 py-2 text-sm text-slate-500">Loading clients…</div>
+                              <div className="px-3 py-2 text-sm text-slate-500">{t('adminModal.loadingClients')}</div>
                             ) : filteredClients.length > 0 ? (
                               <div className="max-h-56 overflow-y-auto">
                                 {filteredClients.map((c) => (
@@ -471,21 +574,21 @@ export function TaskApp() {
                                 ))}
                               </div>
                             ) : (
-                              <div className="px-3 py-2 text-sm text-slate-500">
-                                No match. You can keep typing to create a new client name.
-                              </div>
+                              <div className="px-3 py-2 text-sm text-slate-500">{t('adminModal.noClientMatch')}</div>
                             )}
                           </div>
                         ) : null}
                       </div>
                       {!adminClient.trim() ? (
-                        <p className="mt-1 text-[11px] text-slate-500">Use the customer/company name.</p>
+                        <p className="mt-1 text-[11px] text-slate-500">{t('adminModal.clientHint')}</p>
                       ) : null}
                     </div>
 
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
-                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">Task type</label>
+                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                          {t('adminModal.taskType')}
+                        </label>
                         <select
                           className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
                           value={adminType}
@@ -494,12 +597,12 @@ export function TaskApp() {
                           <option value="INSTALLATION">INSTALLATION</option>
                           <option value="INTERVENTION">INTERVENTION</option>
                         </select>
-                        <p className="mt-1 text-[11px] text-slate-500">Used to route the right technician workflow.</p>
+                        <p className="mt-1 text-[11px] text-slate-500">{t('adminModal.taskTypeHint')}</p>
                       </div>
 
                       <div>
                         <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                          Scheduled date-time (optional)
+                          {t('adminModal.scheduled')}
                         </label>
                         <input
                           type="datetime-local"
@@ -507,15 +610,15 @@ export function TaskApp() {
                           value={adminScheduledDate}
                           onChange={(e) => setAdminScheduledDate(e.target.value)}
                         />
-                        <p className="mt-1 text-[11px] text-slate-500">Local time will be converted to UTC for the API.</p>
+                        <p className="mt-1 text-[11px] text-slate-500">{t('adminModal.scheduledHint')}</p>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">Equipment</p>
-                  <p className="mt-1 text-[11px] text-slate-500">Helps technicians prepare the right device.</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">{t('adminModal.equipment')}</p>
+                  <p className="mt-1 text-[11px] text-slate-500">{t('adminModal.equipmentHint')}</p>
 
                   <datalist id="equipment-make-options">
                     <option value="Teltonika" />
@@ -527,14 +630,14 @@ export function TaskApp() {
                   <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     <div>
                       <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        Number of installations <span className="text-rose-600">*</span>
+                        {t('adminModal.numInstalls')} <span className="text-rose-600">*</span>
                       </label>
                       <div className="mt-1 flex items-stretch gap-2">
                         <button
                           type="button"
                           className="w-10 rounded-md border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50"
                           onClick={() => setAdminNumberOfInstallations((n) => Math.max(1, n - 1))}
-                          aria-label="Decrease installations"
+                          aria-label={t('adminModal.numInstalls')}
                         >
                           −
                         </button>
@@ -549,17 +652,17 @@ export function TaskApp() {
                           type="button"
                           className="w-10 rounded-md border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50"
                           onClick={() => setAdminNumberOfInstallations((n) => Math.max(1, n + 1))}
-                          aria-label="Increase installations"
+                          aria-label={t('adminModal.numInstalls')}
                         >
                           +
                         </button>
                       </div>
-                      <p className="mt-1 text-[11px] text-slate-500">For bulk installs, set the total quantity.</p>
+                      <p className="mt-1 text-[11px] text-slate-500">{t('adminModal.numInstallsHint')}</p>
                     </div>
 
                     <div>
                       <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        Type equipment <span className="text-rose-600">*</span>
+                        {t('adminModal.typeEquipment')} <span className="text-rose-600">*</span>
                       </label>
                       <select
                         className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
@@ -576,7 +679,7 @@ export function TaskApp() {
                   <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     <div>
                       <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        Equipment make <span className="text-rose-600">*</span>
+                        {t('adminModal.equipmentMake')} <span className="text-rose-600">*</span>
                       </label>
                       <input
                         list="equipment-make-options"
@@ -588,7 +691,7 @@ export function TaskApp() {
                     </div>
                     <div>
                       <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        Equipment model <span className="text-rose-600">*</span>
+                        {t('adminModal.equipmentModel')} <span className="text-rose-600">*</span>
                       </label>
                       <input
                         className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
@@ -601,7 +704,7 @@ export function TaskApp() {
 
                   <div className="mt-4">
                     <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                      Equipment version (optional)
+                      {t('adminModal.equipmentVersion')}
                     </label>
                     <input
                       className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
@@ -613,10 +716,8 @@ export function TaskApp() {
                 </div>
 
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">Assignment (optional)</p>
-                  <p className="mt-1 text-[11px] text-slate-500">
-                    Choose a lead technician and any assistants. You can leave this empty and assign later.
-                  </p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">{t('adminModal.assignment')}</p>
+                  <p className="mt-1 text-[11px] text-slate-500">{t('adminModal.assignmentHint')}</p>
                   <button
                     type="button"
                     className="mt-3 flex w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-900 hover:bg-slate-50"
@@ -625,14 +726,16 @@ export function TaskApp() {
                     <span className="min-w-0 truncate">
                       {adminSelectedLead ? (
                         <>
-                          <span className="font-semibold">Lead:</span>{' '}
+                          <span className="font-semibold">{t('adminModal.lead')}</span>{' '}
                           {adminSelectedLead.fullname || adminSelectedLead.username}
                         </>
                       ) : (
-                        <span className="text-slate-600">Select technicians…</span>
+                        <span className="text-slate-600">{t('adminModal.selectTech')}</span>
                       )}
                       <span className="text-slate-500">
-                        {adminSelectedAssistants.length > 0 ? ` · Assistants: ${adminSelectedAssistants.length}` : ''}
+                        {adminSelectedAssistants.length > 0
+                          ? ` · ${t('adminModal.assistants')} ${adminSelectedAssistants.length}`
+                          : ''}
                       </span>
                     </span>
                     <svg
@@ -649,35 +752,37 @@ export function TaskApp() {
                     <div className="mt-3">
                       <input
                         className="mb-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-600 focus:ring-0"
-                        placeholder="Search by name, username or ID"
+                        placeholder={t('adminModal.searchTech')}
                         value={adminTechSearch}
                         onChange={(e) => setAdminTechSearch(e.target.value)}
                       />
                       {(adminSelectedLead || adminSelectedAssistants.length > 0) && (
                         <div className="mb-2 rounded-md border border-slate-200 bg-white p-2 text-xs text-slate-700">
                           <p>
-                            Lead:{' '}
+                            {t('adminModal.lead')}{' '}
                             <span className="font-semibold text-slate-900">
-                              {adminSelectedLead ? adminSelectedLead.fullname || adminSelectedLead.username : 'Not selected'}
+                              {adminSelectedLead
+                                ? adminSelectedLead.fullname || adminSelectedLead.username
+                                : t('adminModal.notSelected')}
                             </span>
                           </p>
                           <p>
-                            Assistants:{' '}
+                            {t('adminModal.assistants')}{' '}
                             <span className="font-semibold text-slate-900">
                               {adminSelectedAssistants.length > 0
-                                ? adminSelectedAssistants.map((t) => t.fullname || t.username).join(', ')
-                                : 'None'}
+                                ? adminSelectedAssistants.map((tech) => tech.fullname || tech.username).join(', ')
+                                : t('adminModal.none')}
                             </span>
                           </p>
                         </div>
                       )}
                       <div className="max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-3">
                         {techniciansQuery.isLoading ? (
-                          <p className="text-sm text-slate-500">Loading technicians…</p>
+                          <p className="text-sm text-slate-500">{t('adminModal.loadingTech')}</p>
                         ) : technicianOptions.length === 0 ? (
-                          <p className="text-sm text-slate-500">No technicians available.</p>
+                          <p className="text-sm text-slate-500">{t('adminModal.noTech')}</p>
                         ) : filteredTechnicians.length === 0 ? (
-                          <p className="text-sm text-slate-500">No technicians match your search.</p>
+                          <p className="text-sm text-slate-500">{t('adminModal.noTechMatch')}</p>
                         ) : (
                           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                             {filteredTechnicians.map((tech) => {
@@ -705,7 +810,7 @@ export function TaskApp() {
                                         }}
                                         className="h-4 w-4 border-slate-300 text-sky-700 focus:ring-sky-500"
                                       />
-                                      Lead
+                                      {t('adminModal.leadLabel')}
                                     </label>
                                     <label className="flex items-center gap-2 text-xs text-slate-700">
                                       <input
@@ -724,7 +829,7 @@ export function TaskApp() {
                                         }}
                                         className="h-4 w-4 border-slate-300 text-sky-700 focus:ring-sky-500"
                                       />
-                                      Assistant
+                                      {t('adminModal.assistantLabel')}
                                     </label>
                                   </div>
                                 </div>
@@ -744,11 +849,11 @@ export function TaskApp() {
                       className="rounded-md border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                       onClick={() => resetAdmin()}
                     >
-                      Reset
+                      {t('adminModal.reset')}
                     </button>
                     <div className="flex items-center gap-2">
                       {!canSubmitAdmin ? (
-                        <span className="text-[11px] text-slate-500">Fill required fields to enable create.</span>
+                        <span className="text-[11px] text-slate-500">{t('adminModal.fillRequired')}</span>
                       ) : null}
                       <button
                         type="button"
@@ -756,7 +861,7 @@ export function TaskApp() {
                         className="rounded-md bg-emerald-600 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
                         onClick={handleAdminSubmit}
                       >
-                        {adminBusy ? 'Creating…' : 'Create task'}
+                        {adminBusy ? t('adminModal.creating') : t('adminModal.createBtn')}
                       </button>
                     </div>
                   </div>
