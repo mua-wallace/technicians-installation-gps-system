@@ -43,6 +43,37 @@ export type TaskFormInstallation = {
   createdByTechnicianId?: number | null
 }
 
+/** Backend may send snake_case keys; read camelCase or snake_case from a form JSON object. */
+function camelKeyToSnakeKey(camelKey: string): string {
+  return camelKey.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase()
+}
+
+export function readTaskFormField(raw: Record<string, unknown>, camelKey: string): unknown {
+  if (Object.prototype.hasOwnProperty.call(raw, camelKey)) return raw[camelKey]
+  const snake = camelKeyToSnakeKey(camelKey)
+  if (Object.prototype.hasOwnProperty.call(raw, snake)) return raw[snake]
+  return undefined
+}
+
+/** JSON numbers/booleans and empty strings → display string for readonly fiche fields. */
+export function formatTaskFormText(value: unknown): string {
+  if (value === null || value === undefined) return '—'
+  if (typeof value === 'boolean') return value ? 'Oui' : 'Non'
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  if (typeof value === 'string') return value.trim() || '—'
+  return String(value).trim() || '—'
+}
+
+export function coerceTaskFormBool(value: unknown): boolean {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') return value !== 0
+  if (typeof value === 'string') {
+    const t = value.trim().toLowerCase()
+    return t === 'true' || t === '1' || t === 'yes' || t === 'oui'
+  }
+  return false
+}
+
 export function filterFormsForViewer(
   forms: TaskFormInstallation[] | undefined,
   opts: {

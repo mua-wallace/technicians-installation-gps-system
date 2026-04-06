@@ -3,6 +3,7 @@ import {
   filterFormsForViewer,
   type TaskFormInstallation,
 } from '../../api/tasks'
+import { SubmittedFormViewerModal } from './SubmittedFormViewerModal'
 
 function formatFormWhen(f: TaskFormInstallation): string {
   const raw = f.createdAt ?? f.updatedAt ?? f.date
@@ -26,6 +27,8 @@ type Props = {
   technicianId: number | null
   technicianFullname?: string | null
   technicianUsername?: string | null
+  /** Task client name (shown in the form viewer header). */
+  taskClient?: string | null
 }
 
 export function TaskSubmittedFormsCollapsible({
@@ -35,8 +38,10 @@ export function TaskSubmittedFormsCollapsible({
   technicianId,
   technicianFullname,
   technicianUsername,
+  taskClient,
 }: Props) {
   const [open, setOpen] = useState(false)
+  const [viewerForm, setViewerForm] = useState<TaskFormInstallation | null>(null)
 
   const visible = useMemo(
     () =>
@@ -54,6 +59,12 @@ export function TaskSubmittedFormsCollapsible({
   const scopeLabel = isAdmin ? 'Toutes les fiches' : 'Vos fiches'
 
   return (
+    <>
+    <SubmittedFormViewerModal
+      form={viewerForm}
+      onClose={() => setViewerForm(null)}
+      taskLabel={taskClient?.trim() || undefined}
+    />
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <button
         type="button"
@@ -109,18 +120,27 @@ export function TaskSubmittedFormsCollapsible({
                           {f.installerName?.trim() ? ` · ${f.installerName.trim()}` : ''}
                         </p>
                       </div>
-                      {hasUrl ? (
-                        <a
-                          href={f.ficheUrl!}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="shrink-0 rounded-md bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-700"
+                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setViewerForm(f)}
+                          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
                         >
-                          Ouvrir
-                        </a>
-                      ) : (
-                        <span className="text-xs text-slate-400">Pas de fichier</span>
-                      )}
+                          Voir
+                        </button>
+                        {hasUrl ? (
+                          <a
+                            href={f.ficheUrl!}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-700"
+                          >
+                            Ouvrir
+                          </a>
+                        ) : (
+                          <span className="text-xs text-slate-400">Pas de fichier</span>
+                        )}
+                      </div>
                     </li>
                   )
                 })}
@@ -129,5 +149,6 @@ export function TaskSubmittedFormsCollapsible({
         </div>
       ) : null}
     </div>
+    </>
   )
 }

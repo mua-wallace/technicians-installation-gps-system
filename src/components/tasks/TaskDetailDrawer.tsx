@@ -810,6 +810,7 @@ export function TaskDetailDrawer({
                 technicianId={currentUserId}
                 technicianFullname={installerDefaultName}
                 technicianUsername={viewerUsername}
+                taskClient={taskQuery.data?.task?.client}
               />
 
               <ConfirmDialog
@@ -1232,7 +1233,7 @@ export function TaskDetailDrawer({
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Fiche (remplie)</p>
                     <div className="mt-3 space-y-3 text-sm text-slate-900">
                       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                        <div>
+                        <div className="col-span-full">
                           <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Client</p>
                           <p className="mt-1 rounded-md border border-slate-200 bg-white px-3 py-2">
                             {form.client || '—'}
