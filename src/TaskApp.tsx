@@ -54,6 +54,18 @@ function datetimeLocalToIso(value: string): string | undefined {
   return Number.isNaN(localDt.getTime()) ? undefined : localDt.toISOString()
 }
 
+function formatDateDdMmYyyy(raw?: string | null): string {
+  if (!raw) return ''
+  try {
+    const d = new Date(raw)
+    if (Number.isNaN(d.getTime())) return ''
+    // Force dd/mm/yyyy regardless of browser locale.
+    return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(d)
+  } catch {
+    return ''
+  }
+}
+
 export function TaskApp() {
   const queryClient = useQueryClient()
   const { t } = useI18n()
@@ -181,7 +193,7 @@ export function TaskApp() {
     const filtered = !q
       ? afterBucket
       : afterBucket.filter((t) => {
-          const scheduled = t.scheduledDate ? new Date(t.scheduledDate).toLocaleDateString() : ''
+          const scheduled = formatDateDdMmYyyy(t.scheduledDate)
           const technicians =
             (t.assignments ?? [])
               .map((a) => a.technician?.fullname || a.technician?.username || String(a.technicianId ?? ''))
@@ -365,28 +377,28 @@ export function TaskApp() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-slate-100 text-slate-900">
-      <div className="mx-auto flex min-h-0 w-full flex-1 flex-col px-3 md:px-6">
-        <header className="flex shrink-0 flex-col gap-4 border-b border-slate-200 bg-white py-4 md:h-20 md:flex-row md:items-center md:justify-between">
+    <div className="flex min-h-screen flex-col overflow-hidden text-slate-900">
+      <div className="mx-auto flex min-h-0 w-full max-w-screen-2xl flex-1 flex-col px-3 pb-6 pt-4 md:px-6 md:pt-6">
+        <header className="flex shrink-0 flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white/85 px-4 py-4 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wider text-sky-600">Malambi</p>
-            <h1 className="mt-0.5 text-2xl font-semibold tracking-tight text-sky-700">{t('taskApp.dashboard')}</h1>
+            <h1 className="mt-0.5 text-2xl font-semibold tracking-tight text-slate-900">{t('taskApp.dashboard')}</h1>
             <p className="text-sm text-slate-500">{t('taskApp.tagline')}</p>
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <LanguageSwitch size="sm" className="order-first sm:order-none" />
-            <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white/80 px-3 py-1.5 text-xs text-slate-700">
-                <span className="text-slate-600">{roleLabel}:</span>
-                <span className="min-w-0 truncate font-medium text-slate-900">{displayName}</span>
-                {meQuery.isFetching ? <span className="text-slate-600">{t('taskApp.syncing')}</span> : null}
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-3 py-1.5 text-xs text-slate-700 shadow-sm">
+              <span className="text-slate-600">{roleLabel}:</span>
+              <span className="min-w-0 truncate font-medium text-slate-900">{displayName}</span>
+              {meQuery.isFetching ? <span className="text-slate-600">{t('taskApp.syncing')}</span> : null}
             </div>
 
             <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-3">
               {isAdmin ? (
                 <button
                   type="button"
-                  className="min-h-10 rounded-md bg-sky-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-50 shadow-sm hover:bg-sky-700"
+                  className="min-h-10 rounded-xl bg-sky-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-50 shadow-sm shadow-sky-600/10 hover:bg-sky-700"
                   onClick={() => {
                     resetAdmin()
                     setAdminModalOpen(true)
@@ -398,7 +410,7 @@ export function TaskApp() {
 
               <button
                 type="button"
-                className="min-h-10 rounded-md bg-rose-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm hover:bg-rose-700"
+                className="min-h-10 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm shadow-rose-600/10 hover:bg-rose-700"
                 onClick={() => {
                   clearAuth()
                   window.location.href = '/login'
@@ -410,8 +422,8 @@ export function TaskApp() {
           </div>
         </header>
 
-        <main className="flex min-h-0 flex-1 gap-4 py-4 lg:gap-6 lg:flex">
-          <aside className="hidden w-64 shrink-0 overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-700 lg:block">
+        <main className="flex min-h-0 flex-1 gap-4 pt-4 lg:gap-6 lg:flex">
+          <aside className="hidden w-72 shrink-0 overflow-y-auto rounded-2xl border border-slate-200/80 bg-white/80 p-4 text-xs text-slate-700 shadow-sm backdrop-blur lg:block">
             {isAdmin ? (
               <div>
                 <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">{t('taskApp.overview')}</p>
@@ -432,7 +444,7 @@ export function TaskApp() {
 
           <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
             {!isAdmin ? (
-              <div className="shrink-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+              <div className="shrink-0 rounded-2xl border border-slate-200/80 bg-white/80 p-3 shadow-sm backdrop-blur">
                 <TechnicianTaskBucketsStrip
                   counts={technicianBucketCounts}
                   value={technicianBucketFilter}

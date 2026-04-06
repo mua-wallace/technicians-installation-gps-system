@@ -18,11 +18,26 @@ function formatFormDate(f: TaskFormInstallation): string {
   if (!raw) return '—'
   try {
     const d = new Date(raw)
-    if (!Number.isNaN(d.getTime())) return d.toLocaleDateString()
+    if (!Number.isNaN(d.getTime())) {
+      // Force dd/mm/yyyy regardless of browser locale.
+      return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(d)
+    }
   } catch {
     /* fall through */
   }
   return raw
+}
+
+function formatDateDdMmYyyy(raw?: string | null): string {
+  if (!raw) return '—'
+  try {
+    const d = new Date(raw)
+    if (Number.isNaN(d.getTime())) return '—'
+    // Force dd/mm/yyyy regardless of browser locale.
+    return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(d)
+  } catch {
+    return '—'
+  }
 }
 
 function Pill({ children, className }: { children: ReactNode; className: string }) {
@@ -85,15 +100,15 @@ export function TaskList({
   }
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm backdrop-blur">
       <SubmittedFormViewerModal
         form={viewerForm?.form ?? null}
         onClose={() => setViewerForm(null)}
         taskLabel={viewerForm?.taskLabel}
       />
-      <div className="shrink-0 mb-3 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+      <div className="mb-3 flex shrink-0 flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
         <div>
-          <h2 className="text-sm font-medium uppercase tracking-wide text-slate-700">{title}</h2>
+          <h2 className="text-sm font-semibold tracking-tight text-slate-900">{title}</h2>
           {subtitle ? (
             <p className="mt-1 text-xs leading-snug text-slate-600">{subtitle}</p>
           ) : null}
@@ -105,18 +120,17 @@ export function TaskList({
         </span>
       </div>
 
-      <div
-        className={`mb-3 grid gap-2 ${showTaskStatusFilter ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}
-      >
+      <div className="mb-3 shrink-0 rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm">
+        <div className={`grid gap-2 ${showTaskStatusFilter ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
         <input
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-600"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-sky-500/20 focus:border-sky-600 focus:ring-4"
           placeholder={t('taskList.searchPlaceholder')}
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
         />
 
         <select
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-600"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-sky-500/20 focus:border-sky-600 focus:ring-4"
           value={typeFilter}
           onChange={(e) => onTypeFilterChange(e.target.value)}
         >
@@ -127,7 +141,7 @@ export function TaskList({
 
         {showTaskStatusFilter ? (
           <select
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-600"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-sky-500/20 focus:border-sky-600 focus:ring-4"
             value={statusFilter}
             onChange={(e) => onStatusFilterChange(e.target.value)}
           >
@@ -139,13 +153,14 @@ export function TaskList({
             <option value="VERIFIED">VERIFIED</option>
           </select>
         ) : null}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white">
           <table className="w-full min-w-[880px] border-collapse text-xs text-slate-700">
             <thead>
-              <tr className="bg-slate-50 text-left uppercase tracking-wide text-[11px] text-slate-500">
+              <tr className="sticky top-0 z-10 bg-slate-50/95 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 backdrop-blur">
                 <th className="border-b border-slate-200 px-3 py-2 text-start">{t('taskList.col.client')}</th>
                 <th className="border-b border-slate-200 px-3 py-2 text-center">{t('taskList.col.type')}</th>
                 <th className="border-b border-slate-200 px-3 py-2 text-center">{t('taskList.col.technicians')}</th>
@@ -178,7 +193,7 @@ export function TaskList({
                   !viewerIsAdmin && isAssignedToMe && typeof onAddFormForTask === 'function'
                 return (
                   <Fragment key={task.id}>
-                  <tr className="bg-white">
+                  <tr className="bg-white transition-colors hover:bg-slate-50">
                   <td className="border-b border-slate-200 px-2 py-2 text-start align-middle">
                     <div className="flex items-center justify-start gap-2">
                       <button
@@ -226,7 +241,7 @@ export function TaskList({
                     </span>
                   </td>
                   <td className="border-b border-slate-200 px-3 py-2 text-center text-slate-600">
-                    {task.scheduledDate ? new Date(task.scheduledDate).toLocaleDateString() : '—'}
+                    {formatDateDdMmYyyy(task.scheduledDate)}
                   </td>
                   <td className="border-b border-slate-200 px-3 py-2 text-center">
                     <Pill
@@ -246,7 +261,7 @@ export function TaskList({
                   <td className="w-0 border-b border-slate-200 py-2 pl-1 pr-2 text-right">
                     <button
                       type="button"
-                      className="rounded p-1.5 text-slate-500 hover:bg-sky-600/20 hover:text-sky-700"
+                      className="rounded-lg p-1.5 text-slate-500 hover:bg-sky-600/15 hover:text-sky-700"
                       onClick={() => onSelectTask(task.id)}
                       title={t('taskList.viewDetail')}
                     >
@@ -360,9 +375,19 @@ export function TaskList({
                 <tr>
                   <td
                     colSpan={7}
-                    className="border-b border-slate-200 px-3 py-8 text-center text-sm text-slate-500"
+                    className="border-b border-slate-200 px-3 py-12 text-center"
                   >
-                    {t('taskList.noTasks')}
+                    <div className="mx-auto flex max-w-sm flex-col items-center gap-3">
+                      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-slate-100 text-slate-600 ring-1 ring-slate-200">
+                        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{t('taskList.noTasks')}</p>
+                        <p className="mt-1 text-xs text-slate-600">{t('taskList.searchPlaceholder')}</p>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ) : null}

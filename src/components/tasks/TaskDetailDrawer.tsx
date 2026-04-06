@@ -232,6 +232,8 @@ export function TaskDetailDrawer({
   const suppressDraftSaveUntilRef = useRef(0)
   /** Snapshot after server/draft load — we only persist when the user changes beyond this (no false “drafts”). */
   const formDraftBaselineRef = useRef<string | null>(null)
+  /** Prevent accidental double-submit (fast double click / re-render). */
+  const submitInFlightRef = useRef(false)
 
   const taskQuery = useQuery({
     queryKey: ['task', taskId],
@@ -551,13 +553,18 @@ export function TaskDetailDrawer({
 
   const handleSubmitForm = async () => {
     if (!taskQuery.data) return
+    if (submitInFlightRef.current) return
+    submitInFlightRef.current = true
     setSubmitError('')
     try {
       setSubmittingForm(true)
       let nextFicheUrl = ficheUrl
+      let didUploadSignedFiche = false
       if (selectedFile) {
         const uploadResp = await tasksApi.uploadSignedFiche(taskId, selectedFile, taskType)
         nextFicheUrl = uploadResp?.ficheUrl ?? nextFicheUrl
+        didUploadSignedFiche = true
+        if (nextFicheUrl) setFicheUrl(nextFicheUrl)
         setSelectedFile(null)
       }
 
@@ -584,7 +591,17 @@ export function TaskDetailDrawer({
       const { taskId: _omitTaskId, ...patchPayload } = submitPayload
       const patchBody = patchPayload as InstallationFormPatchPayload
 
-      const resp = hasExistingFiche
+      // Important: some backends create a (blank) form record when uploading the signed fiche snapshot.
+      // If we uploaded a fiche and there was no form before, we refetch once and switch to PATCH to avoid
+      // creating a duplicate empty form via POST.
+      let shouldUpdate = hasExistingFiche
+      if (!shouldUpdate && didUploadSignedFiche) {
+        const refreshed = await taskQuery.refetch()
+        const serverFormExists = Boolean(refreshed.data?.form)
+        shouldUpdate = serverFormExists
+      }
+
+      const resp = shouldUpdate
         ? effectiveType === 'INTERVENTION'
           ? await tasksApi.updateInterventionForm(taskId, patchBody)
           : await tasksApi.updateInstallationForm(taskId, patchBody)
@@ -613,6 +630,7 @@ export function TaskDetailDrawer({
       setSubmitError(formatted)
     } finally {
       setSubmittingForm(false)
+      submitInFlightRef.current = false
     }
   }
 

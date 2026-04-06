@@ -19,10 +19,10 @@ body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', ui-sans-serif,
     'Segoe UI', sans-serif;
   background:
-    radial-gradient(900px 520px at 50% -10%, rgba(16, 185, 129, 0.18), transparent 60%),
-    radial-gradient(720px 520px at 110% 10%, rgba(56, 189, 248, 0.14), transparent 55%),
-    radial-gradient(680px 520px at -10% 35%, rgba(139, 92, 246, 0.12), transparent 55%),
-    linear-gradient(180deg, #020617 0%, #000 100%);
-  color: #e5e7eb;
+    radial-gradient(900px 520px at 50% -10%, rgba(16, 185, 129, 0.14), transparent 60%),
+    radial-gradient(720px 520px at 110% 10%, rgba(56, 189, 248, 0.12), transparent 55%),
+    radial-gradient(680px 520px at -10% 35%, rgba(139, 92, 246, 0.1), transparent 55%),
+    linear-gradient(180deg, #f8fafc 0%, #eef2ff 42%, #f8fafc 100%);
+  color: #0f172a;
   -webkit-font-smoothing: antialiased;
 }

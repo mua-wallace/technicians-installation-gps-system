@@ -84,7 +84,7 @@ export default function Login() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-100 text-slate-900">
+    <div className="relative min-h-screen overflow-hidden text-slate-900">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute inset-0 opacity-[0.28] [background-image:linear-gradient(to_right,rgba(148,163,184,0.25)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.18)_1px,transparent_1px)] [background-size:48px_48px]" />
         <div className="absolute -top-56 left-1/2 h-[760px] w-[760px] -translate-x-1/2 rounded-full bg-sky-500/12 blur-3xl" />
