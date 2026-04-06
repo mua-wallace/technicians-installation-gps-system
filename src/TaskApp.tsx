@@ -99,11 +99,8 @@ export function TaskApp() {
 
   const tasksForUI = useMemo(() => {
     const tasks: TaskListItem[] = tasksQuery.data?.data ?? []
-    const scoped = isAdmin
-      ? tasks
-      : !myUserId
-        ? []
-        : tasks.filter((t) => t.assignments?.some((a) => a.technicianId === myUserId))
+    // Show every task returned by GET /tasks/submitted (including `forms: []` and unassigned).
+    const scoped = tasks
 
     const q = search.trim().toLowerCase()
     const filtered = !q
@@ -139,7 +136,7 @@ export function TaskApp() {
       const bMs = bKey ? new Date(bKey).getTime() : 0
       return bMs - aMs
     })
-  }, [tasksQuery.data, isAdmin, myUserId, search])
+  }, [tasksQuery.data, search])
 
   // Admin create/assign (minimal wiring; technicians must be entered by ID)
   const [adminModalOpen, setAdminModalOpen] = useState(false)
@@ -335,7 +332,7 @@ export function TaskApp() {
               <p className="text-sm font-medium text-slate-900">
                 {tasksForUI.length} task{tasksForUI.length === 1 ? '' : 's'}
               </p>
-              <p className="mt-1 text-[11px] text-slate-500">My tasks are filtered by assignment.</p>
+              <p className="mt-1 text-[11px] text-slate-500">Includes tasks with or without submitted fiches.</p>
             </div>
           </aside>
 

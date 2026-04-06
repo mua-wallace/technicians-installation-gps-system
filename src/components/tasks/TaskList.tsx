@@ -264,7 +264,11 @@ export function TaskList({
                           </div>
                         ) : null}
                         {formsSorted.length === 0 ? (
-                          <p className="text-center text-sm text-slate-500">Aucune fiche à afficher pour cette tâche.</p>
+                          <p className="text-center text-sm text-slate-500">
+                            {viewerIsAdmin
+                              ? 'No fiche submitted yet.'
+                              : "You haven't submitted any fiche for this task."}
+                          </p>
                         ) : (
                           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
                             <table className="w-full min-w-[640px] border-collapse text-xs">

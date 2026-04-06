@@ -85,7 +85,9 @@ export function TaskSubmittedFormsCollapsible({
         <div className="border-t border-slate-100 px-4 pb-4">
           {submitted === 0 ? (
             <p className="mt-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center text-sm text-slate-600">
-              Aucune fiche soumise pour cette tâche.
+              {isAdmin
+                ? 'No fiche submitted yet.'
+                : "You haven't submitted any fiche for this task."}
             </p>
           ) : (
             <ul className="mt-3 space-y-2">
