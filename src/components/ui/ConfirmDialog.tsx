@@ -28,8 +28,8 @@ export function ConfirmDialog({
 }: Props) {
   const confirmClass =
     confirmTone === 'danger'
-      ? 'bg-rose-600 text-white hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-500'
-      : 'bg-sky-600 text-white hover:bg-sky-700 disabled:bg-slate-200 disabled:text-slate-500'
+      ? 'bg-rose-600 text-white hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-500 shadow-sm'
+      : 'bg-sky-600 text-white hover:bg-sky-700 disabled:bg-slate-200 disabled:text-slate-500 shadow-sm'
 
   const [panelPos, setPanelPos] = useState<{ top: number; left: number } | null>(null)
 
@@ -62,21 +62,21 @@ export function ConfirmDialog({
 
   return (
     <Dialog open={open} onClose={onClose} className="relative z-[60]">
-      <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
+      <div className="animate-fade-in fixed inset-0 bg-black/50 backdrop-blur-sm" aria-hidden="true" />
 
       <div className="fixed inset-0 p-4">
         <DialogPanel
-          className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl"
+          className="animate-scale-in w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
           style={panelPos ? { position: 'fixed', top: panelPos.top, left: panelPos.left } : undefined}
         >
-          <DialogTitle className="text-sm font-semibold text-slate-900">{title}</DialogTitle>
-          {description ? <p className="mt-2 text-sm text-slate-600">{description}</p> : null}
+          <DialogTitle className="text-base font-bold text-slate-900">{title}</DialogTitle>
+          {description ? <p className="mt-2 text-sm leading-relaxed text-slate-500">{description}</p> : null}
 
-          <div className="mt-5 flex items-center justify-end gap-2">
+          <div className="mt-6 flex items-center justify-end gap-3">
             <button
               type="button"
               disabled={busy}
-              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-800 disabled:opacity-60"
               onClick={onClose}
             >
               {cancelLabel}
@@ -84,9 +84,15 @@ export function ConfirmDialog({
             <button
               type="button"
               disabled={busy}
-              className={`rounded-md px-3 py-2 text-xs font-semibold shadow-sm disabled:cursor-not-allowed ${confirmClass}`}
+              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-semibold transition disabled:cursor-not-allowed active:scale-[0.98] ${confirmClass}`}
               onClick={onConfirm}
             >
+              {busy ? (
+                <svg className="h-3.5 w-3.5 animate-spin-smooth" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : null}
               {busy ? '...' : confirmLabel}
             </button>
           </div>

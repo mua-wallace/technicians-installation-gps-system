@@ -737,64 +737,94 @@ export function TaskDetailDrawer({
 
   return (
     <div className="fixed inset-0 z-30 flex">
-      <button type="button" className="h-full w-full bg-black/40" onClick={onClose} />
-      <div className="flex h-full w-full max-w-7xl flex-col bg-slate-100 text-slate-900 shadow-xl">
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-300 px-4 py-3">
+      <button type="button" className="animate-fade-in h-full w-full bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="animate-slide-in-right flex h-full w-full max-w-7xl flex-col bg-slate-50 text-slate-900 shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-slate-300 bg-white px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-900">
+              <h2 className="text-base font-bold text-slate-900">
                 {taskQuery.data?.task?.client ?? t('drawer.task')}
-              </span>
-              <span className="rounded-full border border-slate-300 bg-white px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-900">
+              </h2>
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
                 {Number.isFinite(taskQuery.data?.task?.numberOfInstallations as any)
                   ? `${taskQuery.data?.task?.numberOfInstallations} install${taskQuery.data?.task?.numberOfInstallations === 1 ? '' : 's'}`
                   : '— installs'}
               </span>
-              <span className="rounded-full bg-slate-300/70 px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-900">
-                {taskType}
+              <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                taskType === 'INSTALLATION'
+                  ? 'bg-violet-50 text-violet-700 ring-1 ring-violet-200'
+                  : 'bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200'
+              }`}>
+                {taskType === 'INSTALLATION' ? 'Installation' : 'Intervention'}
               </span>
-              <span className="rounded-full bg-emerald-500/15 px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-emerald-800 ring-1 ring-emerald-500/30">
-                {taskStatus}
+              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                taskStatus === 'COMPLETED' ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200'
+                  : taskStatus === 'VERIFIED' ? 'bg-sky-50 text-sky-800 ring-1 ring-sky-200'
+                  : taskStatus === 'IN_PROGRESS' ? 'bg-amber-50 text-amber-800 ring-1 ring-amber-200'
+                  : taskStatus === 'ASSIGNED' ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200'
+                  : 'bg-slate-100 text-slate-700 ring-1 ring-slate-200'
+              }`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${
+                  taskStatus === 'COMPLETED' ? 'bg-emerald-400'
+                    : taskStatus === 'VERIFIED' ? 'bg-sky-400'
+                    : taskStatus === 'IN_PROGRESS' ? 'bg-amber-400'
+                    : taskStatus === 'ASSIGNED' ? 'bg-blue-400'
+                    : 'bg-slate-400'
+                }`} />
+                {taskStatus === 'IN_PROGRESS' ? 'In Progress'
+                  : taskStatus === 'COMPLETED' ? 'Completed'
+                  : taskStatus === 'VERIFIED' ? 'Verified'
+                  : taskStatus === 'ASSIGNED' ? 'Assigned'
+                  : taskStatus === 'CREATED' ? 'Created'
+                  : taskStatus}
               </span>
             </div>
             {!isAdmin ? (
-              <div className="mt-3 flex max-w-md items-center gap-2">
-                <div
-                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg border px-2 py-1.5 text-[11px] font-medium ${
+              <div className="mt-3 flex max-w-md items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setStep('FORM')}
+                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition ${
                     step === 'FORM'
-                      ? 'border-sky-500 bg-sky-50 text-sky-900'
-                      : 'border-slate-200 bg-white text-slate-600'
+                      ? 'border-sky-500/60 bg-sky-50 text-sky-900 shadow-sm'
+                      : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
                   }`}
                 >
                   <span
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                      step === 'FORM' ? 'bg-sky-600 text-white' : 'bg-slate-200 text-slate-700'
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition ${
+                      step === 'FORM' ? 'bg-sky-600 text-white shadow-sm' : 'bg-slate-200 text-slate-600'
                     }`}
                   >
                     1
                   </span>
                   <span className="truncate">{t('drawer.stepForm')}</span>
+                </button>
+                <div className="flex w-8 shrink-0 items-center justify-center" aria-hidden>
+                  <svg className="h-4 w-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
                 </div>
-                <div className="h-px w-6 shrink-0 bg-slate-300" aria-hidden />
-                <div
-                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg border px-2 py-1.5 text-[11px] font-medium ${
+                <button
+                  type="button"
+                  onClick={() => setStep('SIGNED_FICHE')}
+                  className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition ${
                     step === 'SIGNED_FICHE'
-                      ? 'border-sky-500 bg-sky-50 text-sky-900'
-                      : 'border-slate-200 bg-white text-slate-600'
+                      ? 'border-sky-500/60 bg-sky-50 text-sky-900 shadow-sm'
+                      : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
                   }`}
                 >
                   <span
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                      step === 'SIGNED_FICHE' ? 'bg-sky-600 text-white' : 'bg-slate-200 text-slate-700'
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition ${
+                      step === 'SIGNED_FICHE' ? 'bg-sky-600 text-white shadow-sm' : 'bg-slate-200 text-slate-600'
                     }`}
                   >
                     2
                   </span>
                   <span className="truncate">{t('drawer.stepSigned')}</span>
-                </div>
+                </button>
               </div>
             ) : (
-              <p className="mt-1 text-xs text-slate-600">
+              <p className="mt-1.5 text-xs text-slate-500">
                 {t('drawer.adminStep')} {step === 'FORM' ? '1/2' : '2/2'}:{' '}
                 {step === 'FORM' ? t('drawer.fillForm') : t('drawer.uploadSigned')}
               </p>
@@ -802,7 +832,7 @@ export function TaskDetailDrawer({
           </div>
           <button
             type="button"
-            className="rounded-lg p-2 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
+            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
             onClick={onClose}
           >
             <span className="sr-only">{t('drawer.close')}</span>
@@ -814,85 +844,113 @@ export function TaskDetailDrawer({
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {taskQuery.isLoading && (
-            <div className="rounded-xl border border-slate-300 bg-white/60 p-6 text-sm text-slate-700">
-              {t('drawer.loading')}
+            <div className="flex items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white p-8">
+              <svg className="h-5 w-5 animate-spin-smooth text-sky-500" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span className="text-sm text-slate-500">{t('drawer.loading')}</span>
             </div>
           )}
 
           {taskQuery.isError && (
-            <div className="rounded-xl border border-rose-300 bg-rose-50 p-6 text-sm text-rose-700">
-              {t('drawer.loadError')}
+            <div className="flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 p-6">
+              <svg className="h-5 w-5 shrink-0 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <span className="text-sm text-rose-700">{t('drawer.loadError')}</span>
             </div>
           )}
 
           {taskQuery.data && (
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white p-4">
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
-                    {t('drawer.assignedTech')}
-                  </p>
-                  <p className="text-sm font-semibold text-slate-900">{assignedTechnicianNames}</p>
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-sky-50 text-sky-500">
+                      <svg className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                        {t('drawer.assignedTech')}
+                      </p>
+                      <p className="text-sm font-semibold text-slate-900">{assignedTechnicianNames}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isAdmin && !isFinalizedTask ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-800"
+                        onClick={() => setReassignOpen((s) => !s)}
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                        </svg>
+                        {reassignOpen ? 'Close' : 'Re-assign'}
+                      </button>
+                    ) : null}
+                    {isAdmin ? (
+                      <button
+                        type="button"
+                        disabled={deletingTask}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-100 disabled:opacity-60"
+                        onClick={handleDeleteTask}
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        {deletingTask ? 'Deleting...' : 'Delete'}
+                      </button>
+                    ) : null}
+                    {canUpdateStatus ? (
+                      <>
+                        {isAdmin && taskStatus === 'ASSIGNED' ? (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 ring-1 ring-amber-200 transition hover:bg-amber-100"
+                            onClick={(e) => {
+                              const r = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
+                              setStartAnchorRect({
+                                top: r.top,
+                                left: r.left,
+                                right: r.right,
+                                bottom: r.bottom,
+                                width: r.width,
+                                height: r.height,
+                              })
+                              setStartConfirmOpen(true)
+                            }}
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Start work
+                          </button>
+                        ) : null}
+                        {isAdmin && taskStatus === 'COMPLETED' ? (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98]"
+                            onClick={() => {
+                              handleUpdateStatus('VERIFIED')
+                              onClose()
+                            }}
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            Verify
+                          </button>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-600">{t('drawer.actions')}</span>
-                  {isAdmin && !isFinalizedTask ? (
-                    <button
-                      type="button"
-                      className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                      onClick={() => setReassignOpen((s) => !s)}
-                    >
-                      {reassignOpen ? 'Close re-assign' : 'Re-assign technicians'}
-                    </button>
-                  ) : null}
-                  {isAdmin ? (
-                    <button
-                      type="button"
-                      disabled={deletingTask}
-                      className="rounded-md border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-60"
-                      onClick={handleDeleteTask}
-                    >
-                      {deletingTask ? 'Deleting…' : 'Delete task'}
-                    </button>
-                  ) : null}
-                  {canUpdateStatus ? (
-                    <>
-                      {isAdmin && taskStatus === 'ASSIGNED' ? (
-                        <button
-                          type="button"
-                          className="rounded-md border border-amber-400/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-500/25"
-                          onClick={(e) => {
-                            const r = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
-                            setStartAnchorRect({
-                              top: r.top,
-                              left: r.left,
-                              right: r.right,
-                              bottom: r.bottom,
-                              width: r.width,
-                              height: r.height,
-                            })
-                            setStartConfirmOpen(true)
-                          }}
-                        >
-                          Start work
-                        </button>
-                      ) : null}
-                      {isAdmin && taskStatus === 'COMPLETED' ? (
-                        <button
-                          type="button"
-                          className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
-                          onClick={() => {
-                            handleUpdateStatus('VERIFIED')
-                            onClose()
-                          }}
-                        >
-                          Vérifier
-                        </button>
-                      ) : null}
-                    </>
-                  ) : null}
-                </div>
-                {deleteError ? <p className="mt-2 text-xs text-rose-700">{deleteError}</p> : null}
+                {deleteError ? <p className="mt-3 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-700">{deleteError}</p> : null}
               </div>
 
               <TaskSubmittedFormsCollapsible
@@ -1516,14 +1574,30 @@ export function TaskDetailDrawer({
               ) : null}
 
               {!isAdmin && step === 'FORM' && (
-                <div className="rounded-xl border border-slate-300 bg-slate-100 p-4 text-slate-900">
-                  <h3 className="text-base font-semibold text-sky-900">
-                    {taskType === 'INSTALLATION' ? "Fiche d'installation" : "Fiche d'intervention"}
-                  </h3>
-                  <p className="mt-1 text-sm leading-relaxed text-slate-600">
-                    Renseignez les champs ci-dessous, puis appuyez sur <span className="font-medium text-slate-800">Continuer</span> pour joindre la fiche signée et finaliser.
-                  </p>
-                  {submitError ? <p className="mt-2 text-xs text-rose-700">{submitError}</p> : null}
+                <div className="rounded-xl border border-slate-200 bg-white p-5 text-slate-900 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sky-50 text-sky-600">
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900">
+                        {taskType === 'INSTALLATION' ? "Fiche d'installation" : "Fiche d'intervention"}
+                      </h3>
+                      <p className="mt-1 text-sm leading-relaxed text-slate-500">
+                        Renseignez les champs ci-dessous, puis appuyez sur <span className="font-semibold text-slate-700">Continuer</span> pour joindre la fiche signée et finaliser.
+                      </p>
+                    </div>
+                  </div>
+                  {submitError ? (
+                    <div className="mt-3 flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                      <svg className="h-4 w-4 shrink-0 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      {submitError}
+                    </div>
+                  ) : null}
 
                   <div className="mt-4">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1800,12 +1874,17 @@ export function TaskDetailDrawer({
                       {/* moved Observations/Installateur/Date to SIGNED_FICHE step */}
                   </div>
 
-                  <div className="mt-6 space-y-3 border-t border-slate-300 pt-4">
-                    <p className="text-xs leading-relaxed text-slate-500">{t('draft.autosaveHint')}</p>
+                  <div className="mt-6 space-y-3 border-t border-slate-200 pt-5">
+                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                      <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      {t('draft.autosaveHint')}
+                    </div>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <button
                       type="button"
-                      className="order-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:order-1"
+                      className="order-2 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-800 sm:order-1"
                       onClick={() => {
                         const taskClient = taskQuery.data?.task?.client ?? ''
                         const cleared: InterventionForm = {
@@ -1830,15 +1909,21 @@ export function TaskDetailDrawer({
                         if (currentUserId) clearTaskFormDraft(currentUserId, taskId)
                       }}
                     >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
                       Effacer le brouillon
                     </button>
                     <button
                       type="button"
                       disabled={isBusy}
-                      className="order-1 w-full rounded-lg bg-sky-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 disabled:opacity-60 sm:order-2 sm:w-auto sm:min-w-[200px]"
+                      className="order-1 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-sky-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 disabled:opacity-60 active:scale-[0.98] sm:order-2 sm:w-auto sm:min-w-[220px]"
                       onClick={() => setStep('SIGNED_FICHE')}
                     >
                       Continuer vers la fiche signée
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
                     </button>
                     </div>
                   </div>
@@ -2058,24 +2143,34 @@ export function TaskDetailDrawer({
                     </div>
                   </div>
 
-                  <div className="sticky bottom-0 z-10 mt-6 border-t border-slate-300 bg-slate-100/95 py-4 backdrop-blur-sm">
+                  <div className="sticky bottom-0 z-10 mt-6 border-t border-slate-200 bg-white/95 px-1 py-4 backdrop-blur-sm">
                     <button
                       type="button"
                       disabled={submittingForm || (!selectedFile && !ficheUrl)}
-                      className="w-full rounded-lg bg-emerald-600 px-5 py-3.5 text-base font-semibold text-white shadow-md hover:bg-emerald-700 disabled:opacity-60 sm:text-sm"
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.99]"
                       onClick={handleSubmitForm}
                     >
+                      {submittingForm ? (
+                        <svg className="h-4 w-4 animate-spin-smooth" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                      ) : (
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
                       {submittingForm
                         ? hasExistingFiche
-                          ? 'Enregistrement…'
-                          : 'Envoi…'
+                          ? "Enregistrement\u2026"
+                          : "Envoi\u2026"
                         : hasExistingFiche
-                          ? taskType === 'INSTALLATION'
-                            ? 'Mettre à jour l’installation'
-                            : 'Mettre à jour l’intervention'
-                          : taskType === 'INSTALLATION'
-                            ? 'Créer l’installation'
-                            : 'Créer l’intervention'}
+                          ? taskType === "INSTALLATION"
+                            ? "Mettre \u00e0 jour l\u2019installation"
+                            : "Mettre \u00e0 jour l\u2019intervention"
+                          : taskType === "INSTALLATION"
+                            ? "Cr\u00e9er l\u2019installation"
+                            : "Cr\u00e9er l\u2019intervention"}
                     </button>
                   </div>
                 </div>

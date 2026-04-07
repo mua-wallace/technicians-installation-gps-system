@@ -379,43 +379,71 @@ export function TaskApp() {
   return (
     <div className="flex min-h-screen flex-col overflow-hidden text-slate-900">
       <div className="mx-auto flex min-h-0 w-full max-w-screen-2xl flex-1 flex-col px-3 pb-6 pt-4 md:px-6 md:pt-6">
-        <header className="flex shrink-0 flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white/85 px-4 py-4 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wider text-sky-600">Malambi</p>
-            <h1 className="mt-0.5 text-2xl font-semibold tracking-tight text-slate-900">{t('taskApp.dashboard')}</h1>
-            <p className="text-sm text-slate-500">{t('taskApp.tagline')}</p>
+        <header className="flex shrink-0 flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white/90 px-5 py-4 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="hidden sm:grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-sky-700 shadow-sm">
+              <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-lg font-bold tracking-tight text-slate-900">
+                <span className="text-sky-600">malambi</span>
+                <span className="mx-1.5 text-slate-300">/</span>
+                {t('taskApp.dashboard')}
+              </h1>
+              <p className="text-xs text-slate-500">{t('taskApp.tagline')}</p>
+            </div>
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <LanguageSwitch size="sm" className="order-first sm:order-none" />
-            <div className="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-3 py-1.5 text-xs text-slate-700 shadow-sm">
-              <span className="text-slate-600">{roleLabel}:</span>
-              <span className="min-w-0 truncate font-medium text-slate-900">{displayName}</span>
-              {meQuery.isFetching ? <span className="text-slate-600">{t('taskApp.syncing')}</span> : null}
+
+            <div className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-xs text-slate-700">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sky-400 to-sky-600 text-[10px] font-bold text-white shadow-sm">
+                {(displayName ?? '?').charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-semibold text-slate-900 leading-tight">{displayName}</p>
+                <p className="text-[10px] text-slate-500 leading-tight">{roleLabel}</p>
+              </div>
+              {meQuery.isFetching ? (
+                <svg className="h-3.5 w-3.5 animate-spin-smooth text-sky-500" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : null}
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-3">
+            <div className="flex items-center gap-2">
               {isAdmin ? (
                 <button
                   type="button"
-                  className="min-h-10 rounded-xl bg-sky-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-50 shadow-sm shadow-sky-600/10 hover:bg-sky-700"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-700 active:scale-[0.98]"
                   onClick={() => {
                     resetAdmin()
                     setAdminModalOpen(true)
                   }}
                 >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
                   {t('taskApp.createTask')}
                 </button>
               ) : null}
 
               <button
                 type="button"
-                className="min-h-10 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm shadow-rose-600/10 hover:bg-rose-700"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 active:scale-[0.98]"
                 onClick={() => {
                   clearAuth()
                   window.location.href = '/login'
                 }}
+                title={t('taskApp.logout')}
               >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
                 {t('taskApp.logout')}
               </button>
             </div>
@@ -425,13 +453,18 @@ export function TaskApp() {
         <main className="flex min-h-0 flex-1 gap-4 pt-4 lg:gap-6 lg:flex">
           <aside className="hidden w-72 shrink-0 overflow-y-auto rounded-2xl border border-slate-200/80 bg-white/80 p-4 text-xs text-slate-700 shadow-sm backdrop-blur lg:block">
             {isAdmin ? (
-              <div>
-                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">{t('taskApp.overview')}</p>
-                <p className="text-sm font-medium text-slate-900">
-                  {tasksForUI.length}{' '}
-                  {tasksForUI.length === 1 ? t('taskApp.taskCount') : t('taskApp.taskCountPlural')}
-                </p>
-                <p className="mt-1 text-[11px] text-slate-500">{t('taskApp.overviewHint')}</p>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{t('taskApp.overview')}</p>
+                  <p className="mt-2 text-3xl font-bold tabular-nums text-slate-900">
+                    {tasksForUI.length}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {tasksForUI.length === 1 ? t('taskApp.taskCount') : t('taskApp.taskCountPlural')}
+                  </p>
+                </div>
+                <div className="h-px bg-slate-200" />
+                <p className="text-[11px] leading-relaxed text-slate-500">{t('taskApp.overviewHint')}</p>
               </div>
             ) : (
               <TechnicianTaskBucketsNav
@@ -501,19 +534,28 @@ export function TaskApp() {
 
       {adminModalOpen ? (
         <div className="fixed inset-0 z-40 flex">
-          <button type="button" className="h-full w-full bg-black/40" onClick={() => setAdminModalOpen(false)} />
-          <div className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">{t('adminModal.createTitle')}</p>
-                <p className="text-[11px] text-slate-500">{t('adminModal.createHint')}</p>
+          <button type="button" className="animate-fade-in h-full w-full bg-black/50 backdrop-blur-sm" onClick={() => setAdminModalOpen(false)} />
+          <div className="animate-slide-in-right h-full w-full max-w-2xl overflow-y-auto bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
+              <div className="flex items-center gap-3">
+                <div className="grid h-9 w-9 place-items-center rounded-lg bg-sky-50 text-sky-600">
+                  <svg className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{t('adminModal.createTitle')}</p>
+                  <p className="text-xs text-slate-500">{t('adminModal.createHint')}</p>
+                </div>
               </div>
               <button
                 type="button"
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                 onClick={() => setAdminModalOpen(false)}
               >
-                {t('adminModal.close')}
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
 
@@ -854,25 +896,31 @@ export function TaskApp() {
                   ) : null}
                 </div>
 
-                <div className="sticky bottom-0 -mx-4 mt-4 border-t border-slate-200 bg-white/90 px-4 py-3 backdrop-blur">
+                <div className="sticky bottom-0 -mx-4 mt-6 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <button
                       type="button"
-                      className="rounded-md border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-800"
                       onClick={() => resetAdmin()}
                     >
                       {t('adminModal.reset')}
                     </button>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                       {!canSubmitAdmin ? (
-                        <span className="text-[11px] text-slate-500">{t('adminModal.fillRequired')}</span>
+                        <span className="text-xs text-slate-400">{t('adminModal.fillRequired')}</span>
                       ) : null}
                       <button
                         type="button"
                         disabled={!canSubmitAdmin || adminBusy}
-                        className="rounded-md bg-emerald-600 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
+                        className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-6 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98]"
                         onClick={handleAdminSubmit}
                       >
+                        {adminBusy ? (
+                          <svg className="h-3.5 w-3.5 animate-spin-smooth" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        ) : null}
                         {adminBusy ? t('adminModal.creating') : t('adminModal.createBtn')}
                       </button>
                     </div>

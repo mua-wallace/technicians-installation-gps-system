@@ -42,9 +42,36 @@ function formatDateDdMmYyyy(raw?: string | null): string {
 
 function Pill({ children, className }: { children: ReactNode; className: string }) {
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${className}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${className}`}>
       {children}
     </span>
+  )
+}
+
+function Spinner({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={`animate-spin-smooth text-sky-500 ${className}`} viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+  )
+}
+
+const STATUS_DISPLAY: Record<string, { label: string; dot: string; classes: string }> = {
+  CREATED:     { label: 'Created',     dot: 'bg-slate-400',   classes: 'bg-slate-100 text-slate-700 ring-1 ring-slate-200' },
+  ASSIGNED:    { label: 'Assigned',    dot: 'bg-blue-400',    classes: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200' },
+  IN_PROGRESS: { label: 'In Progress', dot: 'bg-amber-400',   classes: 'bg-amber-50 text-amber-800 ring-1 ring-amber-200' },
+  COMPLETED:   { label: 'Completed',   dot: 'bg-emerald-400', classes: 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200' },
+  VERIFIED:    { label: 'Verified',    dot: 'bg-sky-400',     classes: 'bg-sky-50 text-sky-800 ring-1 ring-sky-200' },
+}
+
+function StatusPill({ status }: { status: string }) {
+  const info = STATUS_DISPLAY[status] ?? { label: status, dot: 'bg-slate-400', classes: 'bg-slate-100 text-slate-700 ring-1 ring-slate-200' }
+  return (
+    <Pill className={info.classes}>
+      <span className={`h-1.5 w-1.5 rounded-full ${info.dot}`} />
+      {info.label}
+    </Pill>
   )
 }
 
@@ -100,37 +127,47 @@ export function TaskList({
   }
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm backdrop-blur">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm backdrop-blur">
       <SubmittedFormViewerModal
         form={viewerForm?.form ?? null}
         onClose={() => setViewerForm(null)}
         taskLabel={viewerForm?.taskLabel}
       />
-      <div className="mb-3 flex shrink-0 flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+      <div className="mb-4 flex shrink-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
         <div>
-          <h2 className="text-sm font-semibold tracking-tight text-slate-900">{title}</h2>
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">{title}</h2>
           {subtitle ? (
-            <p className="mt-1 text-xs leading-snug text-slate-600">{subtitle}</p>
+            <p className="mt-0.5 text-xs leading-snug text-slate-500">{subtitle}</p>
           ) : null}
         </div>
-        <span className="shrink-0 text-xs text-slate-500 sm:pt-0.5">
-          {loading
-            ? t('taskList.loading')
-            : `${tasks.length} ${tasks.length === 1 ? t('taskApp.taskCount') : t('taskApp.taskCountPlural')}`}
+        <span className="inline-flex items-center gap-1.5 shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+          {loading ? (
+            <>
+              <Spinner className="h-3 w-3" />
+              {t('taskList.loading')}
+            </>
+          ) : (
+            `${tasks.length} ${tasks.length === 1 ? t('taskApp.taskCount') : t('taskApp.taskCountPlural')}`
+          )}
         </span>
       </div>
 
-      <div className="mb-3 shrink-0 rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm">
+      <div className="mb-4 shrink-0 rounded-xl border border-slate-200/60 bg-slate-50/80 p-3">
         <div className={`grid gap-2 ${showTaskStatusFilter ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
-        <input
-          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-sky-500/20 focus:border-sky-600 focus:ring-4"
-          placeholder={t('taskList.searchPlaceholder')}
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-        />
+        <div className="relative">
+          <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 py-2.5 text-sm text-slate-900 outline-none ring-sky-500/20 transition focus:border-sky-500 focus:ring-4"
+            placeholder={t('taskList.searchPlaceholder')}
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+          />
+        </div>
 
         <select
-          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-sky-500/20 focus:border-sky-600 focus:ring-4"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-sky-500/20 transition focus:border-sky-500 focus:ring-4"
           value={typeFilter}
           onChange={(e) => onTypeFilterChange(e.target.value)}
         >
@@ -141,16 +178,16 @@ export function TaskList({
 
         {showTaskStatusFilter ? (
           <select
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-sky-500/20 focus:border-sky-600 focus:ring-4"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none ring-sky-500/20 transition focus:border-sky-500 focus:ring-4"
             value={statusFilter}
             onChange={(e) => onStatusFilterChange(e.target.value)}
           >
             <option value="">{t('taskList.filter.statusAll')}</option>
-            <option value="CREATED">CREATED</option>
-            <option value="ASSIGNED">ASSIGNED</option>
-            <option value="IN_PROGRESS">IN_PROGRESS</option>
-            <option value="COMPLETED">COMPLETED</option>
-            <option value="VERIFIED">VERIFIED</option>
+            <option value="CREATED">Created</option>
+            <option value="ASSIGNED">Assigned</option>
+            <option value="IN_PROGRESS">In Progress</option>
+            <option value="COMPLETED">Completed</option>
+            <option value="VERIFIED">Verified</option>
           </select>
         ) : null}
         </div>
@@ -158,18 +195,18 @@ export function TaskList({
 
       <div className="min-h-0 flex-1 overflow-auto">
         <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white">
-          <table className="w-full min-w-[880px] border-collapse text-xs text-slate-700">
+          <table className="w-full min-w-[880px] border-collapse text-sm text-slate-700">
             <thead>
-              <tr className="sticky top-0 z-10 bg-slate-50/95 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 backdrop-blur">
-                <th className="border-b border-slate-200 px-3 py-2 text-start">{t('taskList.col.client')}</th>
-                <th className="border-b border-slate-200 px-3 py-2 text-center">{t('taskList.col.type')}</th>
-                <th className="border-b border-slate-200 px-3 py-2 text-center">{t('taskList.col.technicians')}</th>
-                <th className="border-b border-slate-200 px-3 py-2 text-center whitespace-normal break-words leading-tight max-w-36">
+              <tr className="sticky top-0 z-10 bg-slate-50/95 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 backdrop-blur">
+                <th className="border-b border-slate-200 px-3 py-3 text-start">{t('taskList.col.client')}</th>
+                <th className="border-b border-slate-200 px-3 py-3 text-center">{t('taskList.col.type')}</th>
+                <th className="border-b border-slate-200 px-3 py-3 text-center">{t('taskList.col.technicians')}</th>
+                <th className="border-b border-slate-200 px-3 py-3 text-center whitespace-normal break-words leading-tight max-w-36">
                   {t('taskList.col.submittedPlanned')}
                 </th>
-                <th className="border-b border-slate-200 px-3 py-2 text-center">{t('taskList.col.schedule')}</th>
-                <th className="border-b border-slate-200 px-3 py-2 text-center">{t('taskList.col.status')}</th>
-                <th className="w-0 border-b border-slate-200 py-2 pl-1 pr-2 text-right">{t('taskList.col.details')}</th>
+                <th className="border-b border-slate-200 px-3 py-3 text-center">{t('taskList.col.schedule')}</th>
+                <th className="border-b border-slate-200 px-3 py-3 text-center">{t('taskList.col.status')}</th>
+                <th className="w-0 border-b border-slate-200 py-3 pl-1 pr-3 text-right">{t('taskList.col.details')}</th>
               </tr>
             </thead>
             <tbody>
@@ -193,19 +230,19 @@ export function TaskList({
                   !viewerIsAdmin && isAssignedToMe && typeof onAddFormForTask === 'function'
                 return (
                   <Fragment key={task.id}>
-                  <tr className="bg-white transition-colors hover:bg-slate-50">
-                  <td className="border-b border-slate-200 px-2 py-2 text-start align-middle">
+                  <tr className="task-row group bg-white hover:bg-sky-50/40">
+                  <td className="border-b border-slate-100 px-3 py-3 text-start align-middle">
                     <div className="flex items-center justify-start gap-2">
                       <button
                         type="button"
                         onClick={() => toggleRow(task.id)}
-                        className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                        className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                         title={isOpen ? t('taskList.expand.hideForms') : t('taskList.expand.showForms')}
                         aria-expanded={isOpen}
                       >
                         <span className="sr-only">{isOpen ? t('taskList.expand.hideForms') : t('taskList.expand.showForms')}</span>
                         <svg
-                          className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                          className={`h-4 w-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -213,131 +250,110 @@ export function TaskList({
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
                       </button>
-                      <div className="min-w-0 flex-1 text-start font-medium text-slate-900">{task.client || '—'}</div>
+                      <div className="min-w-0 flex-1 text-start text-sm font-semibold text-slate-900">{task.client || '—'}</div>
                     </div>
                   </td>
-                  <td className="border-b border-slate-200 px-3 py-2 text-center">
+                  <td className="border-b border-slate-100 px-3 py-3 text-center">
                     {task.type === 'INSTALLATION' ? (
-                      <Pill className="bg-violet-500/15 text-violet-700 ring-1 ring-violet-500/30">
-                        INSTALLATION
+                      <Pill className="bg-violet-50 text-violet-700 ring-1 ring-violet-200">
+                        Install
                       </Pill>
                     ) : (
-                      <Pill className="bg-cyan-500/15 text-cyan-700 ring-1 ring-cyan-500/30">
-                        INTERVENTION
+                      <Pill className="bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200">
+                        Interv.
                       </Pill>
                     )}
                   </td>
-                  <td className="border-b border-slate-200 px-3 py-2 text-center text-slate-700">
+                  <td className="border-b border-slate-100 px-3 py-3 text-center text-xs text-slate-600">
                     <span className="mx-auto block line-clamp-2 max-w-[260px]">{getTechnicianDisplayName(task)}</span>
                   </td>
-                  <td className="border-b border-slate-200 px-3 py-2 text-center text-slate-700">
+                  <td className="border-b border-slate-100 px-3 py-3 text-center">
                     <span className="inline-flex flex-col items-center gap-0.5">
-                      <span className="text-sm font-semibold tabular-nums text-slate-900">
-                        {submitted} / {planned}
+                      <span className="text-sm font-bold tabular-nums text-slate-900">
+                        {submitted}<span className="font-normal text-slate-400">/{planned}</span>
                       </span>
-                      <span className="text-[10px] font-normal uppercase tracking-wide text-slate-500">
+                      <span className="text-[10px] font-normal text-slate-400">
                         {viewerIsAdmin ? t('taskList.formsAll') : t('taskList.formsMine')}
                       </span>
                     </span>
                   </td>
-                  <td className="border-b border-slate-200 px-3 py-2 text-center text-slate-600">
+                  <td className="border-b border-slate-100 px-3 py-3 text-center text-xs text-slate-500">
                     {formatDateDdMmYyyy(task.scheduledDate)}
                   </td>
-                  <td className="border-b border-slate-200 px-3 py-2 text-center">
-                    <Pill
-                      className={
-                        task.status === 'COMPLETED'
-                          ? 'bg-emerald-500/10 text-emerald-700 ring-1 ring-emerald-500/30'
-                          : task.status === 'VERIFIED'
-                            ? 'bg-sky-500/10 text-sky-700 ring-1 ring-sky-500/30'
-                            : task.status === 'IN_PROGRESS'
-                              ? 'bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/30'
-                              : 'bg-slate-500/10 text-slate-700 ring-1 ring-slate-500/20'
-                      }
-                    >
-                      {task.status}
-                    </Pill>
+                  <td className="border-b border-slate-100 px-3 py-3 text-center">
+                    <StatusPill status={task.status} />
                   </td>
-                  <td className="w-0 border-b border-slate-200 py-2 pl-1 pr-2 text-right">
+                  <td className="w-0 border-b border-slate-100 py-3 pl-1 pr-3 text-right">
                     <button
                       type="button"
-                      className="rounded-lg p-1.5 text-slate-500 hover:bg-sky-600/15 hover:text-sky-700"
+                      className="rounded-lg p-2 text-slate-400 transition hover:bg-sky-100 hover:text-sky-600"
                       onClick={() => onSelectTask(task.id)}
                       title={t('taskList.viewDetail')}
                     >
                       <span className="sr-only">{t('taskList.viewDetail')}</span>
-                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                        />
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                        />
+                      <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                       </svg>
                     </button>
                   </td>
                   </tr>
                   {isOpen ? (
-                    <tr className="bg-slate-50/90">
-                      <td colSpan={7} className="border-b border-slate-200 px-3 py-3 text-left align-top">
+                    <tr>
+                      <td colSpan={7} className="border-b border-slate-200 bg-slate-50/60 px-4 py-4 text-left align-top">
                         {showAddForm ? (
-                          <div className="mb-3 flex flex-wrap items-center gap-2">
+                          <div className="mb-4 flex flex-wrap items-center gap-3">
                             <button
                               type="button"
                               onClick={() => {
                                 onAddFormForTask(task.id)
                                 setOpenTaskId(null)
                               }}
-                              className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-sky-700"
+                              className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 active:scale-[0.98]"
                             >
                               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                               </svg>
                               {t('taskList.addFiche')}
                             </button>
-                            <span className="text-xs text-slate-500">{t('taskList.addFicheHint')}</span>
+                            <span className="text-xs text-slate-400">{t('taskList.addFicheHint')}</span>
                           </div>
                         ) : null}
                         {formsSorted.length === 0 ? (
-                          <p className="text-center text-sm text-slate-500">
-                            {viewerIsAdmin ? t('taskList.noFiche.admin') : t('taskList.noFiche.tech')}
-                          </p>
+                          <div className="rounded-lg border border-dashed border-slate-200 bg-white/80 px-4 py-6 text-center">
+                            <p className="text-sm text-slate-500">
+                              {viewerIsAdmin ? t('taskList.noFiche.admin') : t('taskList.noFiche.tech')}
+                            </p>
+                          </div>
                         ) : (
-                          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
                             <table className="w-full min-w-[640px] border-collapse text-xs">
                               <thead>
-                                <tr className="bg-slate-100 text-[11px] uppercase tracking-wide text-slate-600">
-                                  <th className="border-b border-slate-200 px-3 py-2 text-left">#</th>
-                                  <th className="border-b border-slate-200 px-3 py-2 text-left">{t('taskList.table.plate')}</th>
-                                  <th className="border-b border-slate-200 px-3 py-2 text-left">{t('taskList.table.chassis')}</th>
-                                  <th className="border-b border-slate-200 px-3 py-2 text-left">{t('taskList.table.installer')}</th>
-                                  <th className="border-b border-slate-200 px-3 py-2 text-left">{t('taskList.table.date')}</th>
-                                  <th className="border-b border-slate-200 px-3 py-2 text-center">{t('taskList.table.view')}</th>
+                                <tr className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-400">
+                                  <th className="border-b border-slate-100 px-3 py-2.5 text-left font-semibold">#</th>
+                                  <th className="border-b border-slate-100 px-3 py-2.5 text-left font-semibold">{t('taskList.table.plate')}</th>
+                                  <th className="border-b border-slate-100 px-3 py-2.5 text-left font-semibold">{t('taskList.table.chassis')}</th>
+                                  <th className="border-b border-slate-100 px-3 py-2.5 text-left font-semibold">{t('taskList.table.installer')}</th>
+                                  <th className="border-b border-slate-100 px-3 py-2.5 text-left font-semibold">{t('taskList.table.date')}</th>
+                                  <th className="border-b border-slate-100 px-3 py-2.5 text-center font-semibold">{t('taskList.table.view')}</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {formsSorted.map((f) => (
-                                  <tr key={f.id} className="text-slate-800">
-                                    <td className="border-b border-slate-100 px-3 py-2 tabular-nums text-slate-600">
+                                  <tr key={f.id} className="text-slate-700 transition hover:bg-slate-50/60">
+                                    <td className="border-b border-slate-50 px-3 py-2.5 tabular-nums text-slate-500">
                                       {f.installationIndex != null ? f.installationIndex : '—'}
                                     </td>
-                                    <td className="border-b border-slate-100 px-3 py-2">
+                                    <td className="border-b border-slate-50 px-3 py-2.5 font-medium text-slate-800">
                                       {(f.immatriculation || '').trim() || '—'}
                                     </td>
-                                    <td className="border-b border-slate-100 px-3 py-2">
+                                    <td className="border-b border-slate-50 px-3 py-2.5">
                                       {(f.chassis || '').trim() || '—'}
                                     </td>
-                                    <td className="border-b border-slate-100 px-3 py-2">
+                                    <td className="border-b border-slate-50 px-3 py-2.5">
                                       {(f.installerName || '').trim() || '—'}
                                     </td>
-                                    <td className="border-b border-slate-100 px-3 py-2">{formatFormDate(f)}</td>
-                                    <td className="border-b border-slate-100 px-2 py-2 text-center">
+                                    <td className="border-b border-slate-50 px-3 py-2.5 text-slate-500">{formatFormDate(f)}</td>
+                                    <td className="border-b border-slate-50 px-2 py-2.5 text-center">
                                       <button
                                         type="button"
                                         onClick={() =>
@@ -346,7 +362,7 @@ export function TaskList({
                                             taskLabel: (task.client || '').trim() || '—',
                                           })
                                         }
-                                        className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-800 hover:bg-slate-50"
+                                        className="rounded-md bg-sky-50 px-3 py-1.5 text-[11px] font-semibold text-sky-700 ring-1 ring-sky-200 transition hover:bg-sky-100"
                                       >
                                         {t('taskList.table.view')}
                                       </button>
@@ -360,8 +376,11 @@ export function TaskList({
                         <button
                           type="button"
                           onClick={() => setOpenTaskId(null)}
-                          className="mt-2 text-xs font-medium text-sky-700 hover:underline"
+                          className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-700"
                         >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                          </svg>
                           {t('taskList.closeRow')}
                         </button>
                       </td>
@@ -375,17 +394,17 @@ export function TaskList({
                 <tr>
                   <td
                     colSpan={7}
-                    className="border-b border-slate-200 px-3 py-12 text-center"
+                    className="px-3 py-16 text-center"
                   >
-                    <div className="mx-auto flex max-w-sm flex-col items-center gap-3">
-                      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-slate-100 text-slate-600 ring-1 ring-slate-200">
-                        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+                    <div className="mx-auto flex max-w-xs flex-col items-center gap-4">
+                      <div className="grid h-14 w-14 place-items-center rounded-2xl bg-slate-100 text-slate-400">
+                        <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                         </svg>
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">{t('taskList.noTasks')}</p>
-                        <p className="mt-1 text-xs text-slate-600">{t('taskList.searchPlaceholder')}</p>
+                        <p className="text-sm font-semibold text-slate-700">{t('taskList.noTasks')}</p>
+                        <p className="mt-1.5 text-xs leading-relaxed text-slate-400">{t('taskList.searchPlaceholder')}</p>
                       </div>
                     </div>
                   </td>
