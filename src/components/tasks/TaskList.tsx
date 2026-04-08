@@ -301,21 +301,22 @@ export function TaskList({
                     <tr>
                       <td colSpan={7} className="border-b border-slate-200 bg-slate-50/60 px-4 py-4 text-left align-top">
                         {showAddForm ? (
-                          <div className="mb-4 flex flex-wrap items-center gap-3">
+                          <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
+                            <span className="mr-auto text-xs text-slate-400">{t('taskList.addFicheHint')}</span>
                             <button
                               type="button"
+                              disabled={task.status === 'COMPLETED'}
                               onClick={() => {
                                 onAddFormForTask(task.id)
                                 setOpenTaskId(null)
                               }}
-                              className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 active:scale-[0.98]"
+                              className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                               </svg>
                               {t('taskList.addFiche')}
                             </button>
-                            <span className="text-xs text-slate-400">{t('taskList.addFicheHint')}</span>
                           </div>
                         ) : null}
                         {formsSorted.length === 0 ? (

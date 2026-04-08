@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "/Users/malambi/dev/projects/malambi/technicians-installation-api/src/modules/tasks/dto"
+    ]
+  }
+}

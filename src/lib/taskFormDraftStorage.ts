@@ -1,92 +1,133 @@
+import localforage from 'localforage'
 import type { InterventionForm } from '../store/useAppStore'
 
-const PREFIX = 'malambi:task-form-draft:v1'
+const PREFIX = 'malambi:task-form-drafts:v2'
+
+const draftStore = localforage.createInstance({
+  name: 'malambi-technician-app',
+  storeName: 'task_form_drafts_v2',
+})
 
 export type TaskFormDraftStep = 'FORM' | 'SIGNED_FICHE'
 
-export type TaskFormDraftPayload = {
+export type TaskFormDraft = {
+  draftId: string
   form: InterventionForm
   step: TaskFormDraftStep
-  /** Persisted signed-doc URL when already uploaded (not File). */
   ficheUrl?: string | null
-  /** Last `task.updatedAt` when this draft was saved — invalidates draft if the task changed on the server. */
   serverTaskUpdatedAt?: string
-  /** Set when the user changed the form vs. the loaded baseline (avoids counting autosaved server mirrors). */
   userEdited?: boolean
-}
-
-function legacyDraftLooksUserEdited(d: TaskFormDraftPayload): boolean {
-  if (d.step === 'SIGNED_FICHE') return true
-  if (d.ficheUrl) return true
-  const f = d.form
-  const textFields = [
-    f.immatriculation,
-    f.chassis,
-    f.observations,
-    f.vehicleMakeModel,
-    f.odometer,
-    f.simNumber,
-    f.imsi,
-    f.operatorCode,
-    f.country,
-  ]
-  if (textFields.some((s) => typeof s === 'string' && s.trim().length > 0)) return true
-  for (const k of Object.keys(f) as Array<keyof InterventionForm>) {
-    const v = f[k]
-    if (typeof v === 'boolean' && v === true) return true
-  }
-  return false
+  createdAt: string
 }
 
 function storageKey(userId: number, taskId: string): string {
   return `${PREFIX}:${userId}:${taskId}`
 }
 
-export function loadTaskFormDraft(userId: number, taskId: string): TaskFormDraftPayload | null {
+// ---------------------------------------------------------------------------
+// Async API — stores an array of drafts per (user, task)
+// ---------------------------------------------------------------------------
+
+export async function loadAllDraftsAsync(
+  userId: number,
+  taskId: string,
+): Promise<TaskFormDraft[]> {
   try {
-    const raw = localStorage.getItem(storageKey(userId, taskId))
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as TaskFormDraftPayload
-    if (!parsed || typeof parsed !== 'object' || !parsed.form || typeof parsed.form !== 'object') return null
-    if (parsed.step !== 'FORM' && parsed.step !== 'SIGNED_FICHE') return null
-    return parsed
+    const arr = await draftStore.getItem<TaskFormDraft[]>(storageKey(userId, taskId))
+    if (!Array.isArray(arr)) return []
+    return arr.filter((d) => d && d.draftId && d.form && (d.step === 'FORM' || d.step === 'SIGNED_FICHE'))
   } catch {
-    return null
+    return []
   }
 }
 
-export function saveTaskFormDraft(userId: number, taskId: string, payload: TaskFormDraftPayload): void {
+export async function loadDraftByIdAsync(
+  userId: number,
+  taskId: string,
+  draftId: string,
+): Promise<TaskFormDraft | null> {
+  const all = await loadAllDraftsAsync(userId, taskId)
+  return all.find((d) => d.draftId === draftId) ?? null
+}
+
+export async function saveDraftAsync(
+  userId: number,
+  taskId: string,
+  draft: TaskFormDraft,
+): Promise<void> {
   try {
-    localStorage.setItem(storageKey(userId, taskId), JSON.stringify(payload))
+    const all = await loadAllDraftsAsync(userId, taskId)
+    const idx = all.findIndex((d) => d.draftId === draft.draftId)
+    if (idx >= 0) {
+      all[idx] = draft
+    } else {
+      all.push(draft)
+    }
+    await draftStore.setItem(storageKey(userId, taskId), all)
+    // Mirror count to localStorage for the sync bucket check
+    try {
+      localStorage.setItem(storageKey(userId, taskId), String(all.length))
+    } catch { /* ignore */ }
   } catch {
-    /* quota or private mode — ignore */
+    /* quota or private mode */
   }
 }
 
-export function clearTaskFormDraft(userId: number, taskId: string): void {
+export async function deleteDraftAsync(
+  userId: number,
+  taskId: string,
+  draftId: string,
+): Promise<void> {
   try {
-    localStorage.removeItem(storageKey(userId, taskId))
+    const all = await loadAllDraftsAsync(userId, taskId)
+    const filtered = all.filter((d) => d.draftId !== draftId)
+    if (filtered.length > 0) {
+      await draftStore.setItem(storageKey(userId, taskId), filtered)
+      try { localStorage.setItem(storageKey(userId, taskId), String(filtered.length)) } catch { /* ignore */ }
+    } else {
+      await draftStore.removeItem(storageKey(userId, taskId))
+      try { localStorage.removeItem(storageKey(userId, taskId)) } catch { /* ignore */ }
+    }
   } catch {
     /* ignore */
   }
 }
 
-/**
- * Restore cached draft only if the task was not updated on the server since we saved
- * (avoids overwriting newer server data after another device/session submitted).
- */
+export async function clearAllDraftsAsync(
+  userId: number,
+  taskId: string,
+): Promise<void> {
+  try {
+    await draftStore.removeItem(storageKey(userId, taskId))
+    try { localStorage.removeItem(storageKey(userId, taskId)) } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sync helper for TaskApp bucket filter
+// ---------------------------------------------------------------------------
+
+export function taskHasLocalFormDraft(userId: number, taskId: string): boolean {
+  try {
+    const raw = localStorage.getItem(storageKey(userId, taskId))
+    if (!raw) return false
+    const n = Number(raw)
+    return Number.isFinite(n) && n > 0
+  } catch {
+    return false
+  }
+}
+
 export function draftMatchesCurrentTask(
-  draft: TaskFormDraftPayload,
+  draft: TaskFormDraft,
   currentTaskUpdatedAt: string | undefined,
 ): boolean {
   if (!draft.serverTaskUpdatedAt || !currentTaskUpdatedAt) return true
   return draft.serverTaskUpdatedAt === currentTaskUpdatedAt
 }
 
-/** True if there is a local draft that should appear under “Drafts” (user-edited or legacy heuristic). */
-export function taskHasLocalFormDraft(userId: number, taskId: string): boolean {
-  const d = loadTaskFormDraft(userId, taskId)
-  if (!d) return false
-  if (d.userEdited === true) return true
-  return legacyDraftLooksUserEdited(d)
+export function createNewDraftId(): string {
+  return crypto.randomUUID()
 }
