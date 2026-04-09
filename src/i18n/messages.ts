@@ -136,6 +136,25 @@ export type MessageId =
   | 'drawer.uploadSigned'
   | 'drawer.task'
   | 'draft.autosaveHint'
+  | 'personalTask.addBtn'
+  | 'personalTask.title'
+  | 'personalTask.hint'
+  | 'personalTask.taskTitle'
+  | 'personalTask.taskTitlePlaceholder'
+  | 'personalTask.description'
+  | 'personalTask.descriptionPlaceholder'
+  | 'personalTask.priority'
+  | 'personalTask.priorityLow'
+  | 'personalTask.priorityMedium'
+  | 'personalTask.priorityHigh'
+  | 'personalTask.dueDate'
+  | 'personalTask.category'
+  | 'personalTask.categoryFollowUp'
+  | 'personalTask.categoryReminder'
+  | 'personalTask.categoryMaintenance'
+  | 'personalTask.categoryOther'
+  | 'personalTask.save'
+  | 'personalTask.cancel'
 
 const en: Record<MessageId, string> = {
   'lang.en': 'EN',
@@ -278,6 +297,25 @@ const en: Record<MessageId, string> = {
   'drawer.task': 'Task',
   'draft.autosaveHint':
     'Your entry is saved automatically on this device; you can close this task and resume later.',
+  'personalTask.addBtn': 'Personal task',
+  'personalTask.title': 'New personal task',
+  'personalTask.hint': 'Create a personal reminder or follow-up task for yourself.',
+  'personalTask.taskTitle': 'Title',
+  'personalTask.taskTitlePlaceholder': 'e.g. Follow up with client, Check GPS signal…',
+  'personalTask.description': 'Description (optional)',
+  'personalTask.descriptionPlaceholder': 'Add any details or notes…',
+  'personalTask.priority': 'Priority',
+  'personalTask.priorityLow': 'Low',
+  'personalTask.priorityMedium': 'Medium',
+  'personalTask.priorityHigh': 'High',
+  'personalTask.dueDate': 'Due date (optional)',
+  'personalTask.category': 'Category',
+  'personalTask.categoryFollowUp': 'Follow-up',
+  'personalTask.categoryReminder': 'Reminder',
+  'personalTask.categoryMaintenance': 'Maintenance',
+  'personalTask.categoryOther': 'Other',
+  'personalTask.save': 'Save task',
+  'personalTask.cancel': 'Cancel',
 }
 
 const fr: Record<MessageId, string> = {
@@ -422,6 +460,25 @@ const fr: Record<MessageId, string> = {
   'drawer.task': 'Tâche',
   'draft.autosaveHint':
     'Votre saisie est enregistrée automatiquement sur cet appareil ; vous pouvez fermer cette tâche et reprendre plus tard.',
+  'personalTask.addBtn': 'Tâche perso',
+  'personalTask.title': 'Nouvelle tâche personnelle',
+  'personalTask.hint': 'Créez un rappel ou un suivi pour vous-même.',
+  'personalTask.taskTitle': 'Titre',
+  'personalTask.taskTitlePlaceholder': 'ex. Relancer le client, Vérifier le signal GPS…',
+  'personalTask.description': 'Description (optionnel)',
+  'personalTask.descriptionPlaceholder': 'Ajoutez des détails ou notes…',
+  'personalTask.priority': 'Priorité',
+  'personalTask.priorityLow': 'Basse',
+  'personalTask.priorityMedium': 'Moyenne',
+  'personalTask.priorityHigh': 'Haute',
+  'personalTask.dueDate': 'Échéance (optionnel)',
+  'personalTask.category': 'Catégorie',
+  'personalTask.categoryFollowUp': 'Suivi',
+  'personalTask.categoryReminder': 'Rappel',
+  'personalTask.categoryMaintenance': 'Maintenance',
+  'personalTask.categoryOther': 'Autre',
+  'personalTask.save': 'Enregistrer',
+  'personalTask.cancel': 'Annuler',
 }
 
 export const messagesByLocale: Record<Locale, Record<MessageId, string>> = { en, fr }

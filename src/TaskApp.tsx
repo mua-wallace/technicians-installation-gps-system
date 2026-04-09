@@ -16,7 +16,7 @@ import { TaskDetailDrawer } from './components/tasks/TaskDetailDrawer'
 import { TaskList } from './components/tasks/TaskList'
 import { LanguageSwitch } from './components/ui/LanguageSwitch'
 import { useI18n } from './i18n/I18nContext'
-import { taskHasLocalFormDraft } from './lib/taskFormDraftStorage'
+
 import {
   TechnicianTaskBucketsNav,
   TechnicianTaskBucketsStrip,
@@ -146,12 +146,10 @@ export function TaskApp() {
     if (isAdmin || myUserId == null) return base
     for (const t of technicianAssignedTasks) {
       base.all += 1
-      const hasLocal = taskHasLocalFormDraft(myUserId, t.id)
       const b = getTechnicianTaskBucket(t, {
         technicianId: myUserId,
         fullname: profile?.fullname ?? null,
         username: profile?.username ?? null,
-        hasLocalFormDraft: hasLocal,
       })
       if (b !== 'open') {
         base[b] += 1
@@ -177,13 +175,11 @@ export function TaskApp() {
     let afterBucket = scoped
     if (!isAdmin && technicianBucketFilter !== 'all' && myUserId != null) {
       afterBucket = scoped.filter((t) => {
-        const hasLocal = taskHasLocalFormDraft(myUserId, t.id)
         return (
           getTechnicianTaskBucket(t, {
             technicianId: myUserId,
             fullname: profile?.fullname ?? null,
             username: profile?.username ?? null,
-            hasLocalFormDraft: hasLocal,
           }) === technicianBucketFilter
         )
       })
@@ -233,6 +229,22 @@ export function TaskApp() {
     profile?.fullname,
     profile?.username,
   ])
+
+  // Personal task modal (technician only — UI design only, no backend)
+  const [personalTaskOpen, setPersonalTaskOpen] = useState(false)
+  const [ptTitle, setPtTitle] = useState('')
+  const [ptDescription, setPtDescription] = useState('')
+  const [ptPriority, setPtPriority] = useState<'low' | 'medium' | 'high'>('medium')
+  const [ptDueDate, setPtDueDate] = useState('')
+  const [ptCategory, setPtCategory] = useState<'follow-up' | 'reminder' | 'maintenance' | 'other'>('follow-up')
+
+  const resetPersonalTask = () => {
+    setPtTitle('')
+    setPtDescription('')
+    setPtPriority('medium')
+    setPtDueDate('')
+    setPtCategory('follow-up')
+  }
 
   // Admin create/assign (minimal wiring; technicians must be entered by ID)
   const [adminModalOpen, setAdminModalOpen] = useState(false)
@@ -430,7 +442,21 @@ export function TaskApp() {
                   </svg>
                   {t('taskApp.createTask')}
                 </button>
-              ) : null}
+              ) : (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-violet-700 active:scale-[0.98]"
+                  onClick={() => {
+                    resetPersonalTask()
+                    setPersonalTaskOpen(true)
+                  }}
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  {t('personalTask.addBtn')}
+                </button>
+              )}
 
               <button
                 type="button"
@@ -927,6 +953,147 @@ export function TaskApp() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Personal task modal (technician only — UI design only) */}
+      {personalTaskOpen ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 sm:p-6">
+          <button type="button" className="animate-fade-in absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setPersonalTaskOpen(false)} />
+          <div className="animate-scale-in relative w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+              <div className="flex items-center gap-3">
+                <div className="grid h-9 w-9 place-items-center rounded-lg bg-violet-50 text-violet-600">
+                  <svg className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{t('personalTask.title')}</p>
+                  <p className="text-xs text-slate-500">{t('personalTask.hint')}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                onClick={() => setPersonalTaskOpen(false)}
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Form body */}
+            <div className="space-y-4 px-5 py-5">
+              {/* Title */}
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700">
+                  {t('personalTask.taskTitle')} <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-500/20"
+                  placeholder={t('personalTask.taskTitlePlaceholder')}
+                  value={ptTitle}
+                  onChange={(e) => setPtTitle(e.target.value)}
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700">{t('personalTask.description')}</label>
+                <textarea
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-500/20"
+                  rows={3}
+                  placeholder={t('personalTask.descriptionPlaceholder')}
+                  value={ptDescription}
+                  onChange={(e) => setPtDescription(e.target.value)}
+                />
+              </div>
+
+              {/* Priority + Category row */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Priority */}
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">{t('personalTask.priority')}</label>
+                  <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                    {(['low', 'medium', 'high'] as const).map((p) => {
+                      const labels = { low: t('personalTask.priorityLow'), medium: t('personalTask.priorityMedium'), high: t('personalTask.priorityHigh') }
+                      const colors = {
+                        low: ptPriority === p ? 'bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-200' : 'text-slate-500 hover:text-slate-700',
+                        medium: ptPriority === p ? 'bg-white text-amber-700 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:text-slate-700',
+                        high: ptPriority === p ? 'bg-white text-rose-700 shadow-sm ring-1 ring-rose-200' : 'text-slate-500 hover:text-slate-700',
+                      }
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          className={`flex-1 rounded-md px-2 py-1.5 text-[11px] font-semibold transition ${colors[p]}`}
+                          onClick={() => setPtPriority(p)}
+                        >
+                          {labels[p]}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Category */}
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">{t('personalTask.category')}</label>
+                  <select
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-500/20"
+                    value={ptCategory}
+                    onChange={(e) => setPtCategory(e.target.value as typeof ptCategory)}
+                  >
+                    <option value="follow-up">{t('personalTask.categoryFollowUp')}</option>
+                    <option value="reminder">{t('personalTask.categoryReminder')}</option>
+                    <option value="maintenance">{t('personalTask.categoryMaintenance')}</option>
+                    <option value="other">{t('personalTask.categoryOther')}</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Due date */}
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700">{t('personalTask.dueDate')}</label>
+                <input
+                  type="datetime-local"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-violet-500 focus:ring-4 focus:ring-violet-500/20"
+                  value={ptDueDate}
+                  onChange={(e) => setPtDueDate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50/80 px-5 py-4">
+              <button
+                type="button"
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 active:scale-[0.98]"
+                onClick={() => setPersonalTaskOpen(false)}
+              >
+                {t('personalTask.cancel')}
+              </button>
+              <button
+                type="button"
+                disabled={!ptTitle.trim()}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-5 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+                onClick={() => {
+                  // UI-only — no backend wired yet
+                  setPersonalTaskOpen(false)
+                  resetPersonalTask()
+                }}
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                {t('personalTask.save')}
+              </button>
             </div>
           </div>
         </div>

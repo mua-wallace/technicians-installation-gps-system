@@ -1,20 +1,12 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { TaskAssignment, TaskFormRow, TaskStatus, TaskType } from '../../api/tasks'
+import type { TaskAssignment, TaskFormRow, TaskStatus, TaskType, TaskFormDraftServer } from '../../api/tasks'
 import { tasksApi, type InstallationFormPatchPayload, type InstallationFormSubmitPayload } from '../../api/tasks'
 import type { InterventionForm } from '../../store/useAppStore'
 import { usersApi } from '../../api/users'
 import type { ClientRow } from '../../api/users'
 import type { ClientVehicleRow } from '../../api/users'
 import { useI18n } from '../../i18n/I18nContext'
-import {
-  createNewDraftId,
-  deleteDraftAsync,
-  draftMatchesCurrentTask,
-  loadAllDraftsAsync,
-  saveDraftAsync,
-  type TaskFormDraft,
-} from '../../lib/taskFormDraftStorage'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { TaskSubmittedFormsCollapsible } from './TaskSubmittedFormsCollapsible'
 
@@ -229,10 +221,10 @@ export function TaskDetailDrawer({
   const [immatSearch, setImmatSearch] = useState('')
   const [immatDropdownOpen, setImmatDropdownOpen] = useState(false)
   const [vehicleManualMode, setVehicleManualMode] = useState(false)
-  /** All saved drafts for this task (loaded from async storage). */
-  const [allDrafts, setAllDrafts] = useState<TaskFormDraft[]>([])
-  /** The draft currently being edited. null = fresh form (not yet saved as draft). */
-  const [activeDraftId, setActiveDraftId] = useState<string | null>(null)
+  /** All saved drafts for this task (from server). */
+  const [allDrafts, setAllDrafts] = useState<TaskFormDraftServer[]>([])
+  /** The server-side draft ID currently being edited. null = fresh form. */
+  const [activeDraftId, setActiveDraftId] = useState<number | null>(null)
   const signedFicheInputId = useId()
   const suppressDraftSaveUntilRef = useRef(0)
   const formDraftBaselineRef = useRef<string | null>(null)
@@ -324,28 +316,9 @@ export function TaskDetailDrawer({
     applyFormState(baseForm, baseStep, baseFicheUrl)
     setActiveDraftId(null)
 
-    // When "Add Fiche" is clicked (nonce > 0), create a fresh draft id immediately
-    if (!isAdmin && taskFormIntentNonce > 0) {
-      setActiveDraftId(createNewDraftId())
-    }
-
-    // Load all drafts from async storage
-    const uid = currentUserId
-    const assigned = uid != null && initialAssignments.some((a) => a.technicianId === uid)
-    let cancelled = false
-    if (!isAdmin && uid != null && assigned) {
-      loadAllDraftsAsync(uid, taskId).then((drafts) => {
-        if (cancelled) return
-        const taskUpdatedAt = taskQuery.data?.task?.updatedAt
-        // Filter out stale drafts
-        const valid = drafts.filter((d) => draftMatchesCurrentTask(d, taskUpdatedAt))
-        setAllDrafts(valid)
-      })
-    } else {
-      setAllDrafts([])
-    }
-
-    return () => { cancelled = true }
+    // Load drafts from server response
+    const serverDrafts: TaskFormDraftServer[] = (taskQuery.data?.task as any)?.drafts ?? []
+    setAllDrafts(serverDrafts)
   }, [taskQuery.data, taskId, isAdmin, currentUserId, installerDefaultName, taskFormIntentNonce])
 
   const initialEdit = useMemo(() => {
@@ -524,38 +497,35 @@ export function TaskDetailDrawer({
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
-  /** Auto-save active draft to async storage on changes. */
+  /** Auto-save active draft to server on changes. */
   useEffect(() => {
     if (!open || isAdmin || !currentUserId) return
     if (!taskQuery.data?.task || taskQuery.data.task.id !== taskId) return
     const assignments = taskQuery.data.assignments ?? []
     if (!assignments.some((a) => a.technicianId === currentUserId)) return
 
-    const taskUpdatedAt = taskQuery.data.task.updatedAt
     const t = window.setTimeout(() => {
       if (Date.now() < suppressDraftSaveUntilRef.current) return
       const snap = JSON.stringify({ form, step, ficheUrl: ficheUrl ?? null })
       if (snap === formDraftBaselineRef.current) return
-      // Ensure we have a draft id
-      const draftId = activeDraftId ?? createNewDraftId()
-      if (!activeDraftId) setActiveDraftId(draftId)
-      const draft: TaskFormDraft = {
-        draftId,
-        form,
-        step,
+
+      const payload: Record<string, unknown> = {
+        ...form,
+        formStep: step,
         ficheUrl: ficheUrl ?? undefined,
-        serverTaskUpdatedAt: taskUpdatedAt,
-        userEdited: true,
-        createdAt: allDrafts.find((d) => d.draftId === draftId)?.createdAt ?? new Date().toISOString(),
       }
-      saveDraftAsync(currentUserId, taskId, draft).then(() => {
-        // Keep allDrafts in sync
+
+      tasksApi.saveDraft(taskId, activeDraftId, payload).then((resp) => {
+        const saved = resp.draft
+        if (!activeDraftId) setActiveDraftId(saved.id)
         setAllDrafts((prev) => {
-          const idx = prev.findIndex((d) => d.draftId === draftId)
-          if (idx >= 0) { const next = [...prev]; next[idx] = draft; return next }
-          return [...prev, draft]
+          const idx = prev.findIndex((d) => d.id === saved.id)
+          if (idx >= 0) { const next = [...prev]; next[idx] = saved; return next }
+          return [...prev, saved]
         })
-      })
+        // Refresh task list so bucket counts reflect the new draft
+        void queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      }).catch(() => { /* network error — will retry on next change */ })
     }, 500)
     return () => window.clearTimeout(t)
   }, [
@@ -568,9 +538,29 @@ export function TaskDetailDrawer({
     ficheUrl,
     activeDraftId,
     taskQuery.data?.task?.id,
-    taskQuery.data?.task?.updatedAt,
     taskQuery.data?.assignments,
   ])
+
+  /** Save draft immediately on close if the form has been modified, then refresh. */
+  const handleClose = () => {
+    if (!isAdmin && currentUserId && taskQuery.data?.task?.id === taskId) {
+      const snap = JSON.stringify({ form, step, ficheUrl: ficheUrl ?? null })
+      if (snap !== formDraftBaselineRef.current) {
+        const payload: Record<string, unknown> = {
+          ...form,
+          formStep: step,
+          ficheUrl: ficheUrl ?? undefined,
+        }
+        tasksApi.saveDraft(taskId, activeDraftId, payload)
+          .then(() => {
+            void queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+            void queryClient.invalidateQueries({ queryKey: ['tasks'] })
+          })
+          .catch(() => {})
+      }
+    }
+    onClose()
+  }
 
   const handleSubmitForm = async () => {
     if (!taskQuery.data) return
@@ -654,10 +644,10 @@ export function TaskDetailDrawer({
       void queryClient.invalidateQueries({ queryKey: ['tasks'] })
       void queryClient.invalidateQueries({ queryKey: ['task', taskId] })
       onTaskUpdated?.(taskId)
-      if (currentUserId && activeDraftId) {
-        deleteDraftAsync(currentUserId, taskId, activeDraftId).then(() => {
-          setAllDrafts((prev) => prev.filter((d) => d.draftId !== activeDraftId))
-        })
+      if (activeDraftId) {
+        tasksApi.deleteDraft(taskId, activeDraftId).then(() => {
+          setAllDrafts((prev) => prev.filter((d) => d.id !== activeDraftId))
+        }).catch(() => {})
         setActiveDraftId(null)
       }
       onClose()
@@ -778,7 +768,7 @@ export function TaskDetailDrawer({
 
   return (
     <div className="fixed inset-0 z-30 flex">
-      <button type="button" className="animate-fade-in h-full w-full bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <button type="button" className="animate-fade-in h-full w-full bg-black/50 backdrop-blur-sm" onClick={handleClose} />
       <div className="animate-slide-in-right flex h-full w-full max-w-7xl flex-col bg-slate-50 text-slate-900 shadow-2xl">
         <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
           <div className="min-w-0">
@@ -874,7 +864,7 @@ export function TaskDetailDrawer({
           <button
             type="button"
             className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-            onClick={onClose}
+            onClick={handleClose}
           >
             <span className="sr-only">{t('drawer.close')}</span>
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1005,12 +995,51 @@ export function TaskDetailDrawer({
                 drafts={allDrafts}
                 activeDraftId={activeDraftId}
                 onResumeDraft={(draft) => {
-                  setActiveDraftId(draft.draftId)
-                  setForm(draft.form)
-                  setFicheUrl(draft.ficheUrl ?? null)
-                  setStep(draft.step)
-                  setImmatSearch(draft.form.immatriculation ?? '')
-                  formDraftBaselineRef.current = JSON.stringify({ form: draft.form, step: draft.step, ficheUrl: draft.ficheUrl ?? null })
+                  setActiveDraftId(draft.id)
+                  const draftForm: InterventionForm = {
+                    ...DEFAULT_FORM,
+                    client: draft.client ?? '',
+                    vehicleMakeModel: draft.vehicleMakeModel ?? '',
+                    immatriculation: draft.immatriculation ?? '',
+                    year: draft.year ?? '',
+                    odometer: draft.odometer ?? '',
+                    chassis: draft.chassis ?? '',
+                    operatorCode: draft.operatorCode ?? '',
+                    country: draft.country ?? '',
+                    simNumber: draft.simNumber ?? '',
+                    imsi: draft.imsi ?? '',
+                    antivol: draft.antivol ?? false,
+                    geolocation: draft.geolocation ?? false,
+                    fleetManagement: draft.fleetManagement ?? false,
+                    otherOption: draft.otherOption ?? false,
+                    camera: draft.camera ?? false,
+                    alarm: draft.alarm ?? false,
+                    buzzer: draft.buzzer ?? false,
+                    canClick: draft.canClick ?? false,
+                    alimentationRed: draft.alimentationRed ?? false,
+                    alimentationYellow: draft.alimentationYellow ?? false,
+                    acc: draft.acc ?? false,
+                    immobilisationCable: draft.immobilisationCable ?? false,
+                    fuelGauge: draft.fuelGauge ?? false,
+                    canH: draft.canH ?? false,
+                    canL: draft.canL ?? false,
+                    observations: draft.observations ?? '',
+                    battery12vOk: draft.battery12vOk ?? false,
+                    kitGpsConnected: draft.kitGpsConnected ?? false,
+                    engineStartsWell: draft.engineStartsWell ?? false,
+                    dashboardDefaults: draft.dashboardDefaults ?? false,
+                    buttonsDefaults: draft.buttonsDefaults ?? false,
+                    climRadioDefaults: draft.climRadioDefaults ?? false,
+                    installerName: draft.installerName ?? '',
+                    date: draft.date ?? '',
+                  }
+                  const draftStep = (draft.formStep === 'SIGNED_FICHE' ? 'SIGNED_FICHE' : 'FORM') as Step
+                  const draftFicheUrl = draft.ficheUrl ?? null
+                  setForm(draftForm)
+                  setFicheUrl(draftFicheUrl)
+                  setStep(draftStep)
+                  setImmatSearch(draftForm.immatriculation ?? '')
+                  formDraftBaselineRef.current = JSON.stringify({ form: draftForm, step: draftStep, ficheUrl: draftFicheUrl })
                 }}
               />
 
@@ -2043,12 +2072,14 @@ export function TaskDetailDrawer({
                           setImmatDropdownOpen(false)
                           setSelectedFile(null)
                           suppressDraftSaveUntilRef.current = Date.now() + 900
-                          if (currentUserId && activeDraftId) {
-                            deleteDraftAsync(currentUserId, taskId, activeDraftId).then(() => {
-                              setAllDrafts((prev) => prev.filter((d) => d.draftId !== activeDraftId))
-                            })
+                          if (activeDraftId) {
+                            tasksApi.deleteDraft(taskId, activeDraftId).then(() => {
+                              setAllDrafts((prev) => prev.filter((d) => d.id !== activeDraftId))
+                              void queryClient.invalidateQueries({ queryKey: ['tasks'] })
+                              void queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+                            }).catch(() => {})
                           }
-                          setActiveDraftId(createNewDraftId())
+                          setActiveDraftId(null)
                         }}
                       >
                         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

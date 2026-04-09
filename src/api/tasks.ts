@@ -109,8 +109,8 @@ export function filterFormsForViewer(
 
 /**
  * Technician list grouping.
- * - draft: local cached partial form (browser) — see `taskHasLocalFormDraft` in `taskFormDraftStorage`
- * - open: assigned work not finished on the server, no local draft (only listed under “All”)
+ * - draft: task has server-side drafts
+ * - open: assigned work not finished on the server, no draft (only listed under “All”)
  */
 export type TechnicianTaskBucket = 'draft' | 'submitted' | 'rejected' | 'validated' | 'open'
 
@@ -152,10 +152,10 @@ export function formLooksRejected(form: TaskFormInstallation): boolean {
 /**
  * Classifies a task for the technician dashboard sidebar.
  * - validated: task verified by office
- * - rejected: at least one of the technician’s fiches is marked rejected (when API sends status)
- * - draft: has a user-edited local draft (`hasLocalFormDraft` from caller)
+ * - rejected: at least one of the technician's fiches is marked rejected (when API sends status)
+ * - draft: has server-side drafts for this task
  * - submitted: all planned fiches sent, still awaiting verification
- * - open: not all fiches on the server yet and no local draft (shown under “All” only)
+ * - open: not all fiches on the server yet and no draft (shown under “All” only)
  */
 export function getTechnicianTaskBucket(
   task: TaskListItem,
@@ -163,8 +163,6 @@ export function getTechnicianTaskBucket(
     technicianId: number | null
     fullname?: string | null
     username?: string | null
-    /** From `taskHasLocalFormDraft` — partial form cached in the browser for this task. */
-    hasLocalFormDraft?: boolean
   },
 ): TechnicianTaskBucket {
   const visibleForms = filterFormsForViewer(task.forms, {
@@ -179,7 +177,7 @@ export function getTechnicianTaskBucket(
 
   if (visibleForms.some(formLooksRejected)) return 'rejected'
 
-  if (opts.hasLocalFormDraft) return 'draft'
+  if ((task.drafts?.length ?? 0) > 0) return 'draft'
 
   if (visibleForms.length < planned) return 'open'
 
@@ -189,6 +187,52 @@ export function getTechnicianTaskBucket(
 export function isTaskAssignedToTechnician(task: TaskListItem, technicianId: number | null): boolean {
   if (technicianId == null) return false
   return (task.assignments ?? []).some((a) => a.technicianId === technicianId)
+}
+
+/** A draft row returned from the server (`installation_form_drafts` table). */
+export type TaskFormDraftServer = {
+  id: number
+  taskId: string
+  accountId?: number
+  createdByTechnicianId?: number
+  formStep?: string | null
+  client?: string | null
+  vehicleMakeModel?: string | null
+  immatriculation?: string | null
+  year?: string | null
+  odometer?: string | null
+  chassis?: string | null
+  operatorCode?: string | null
+  country?: string | null
+  simNumber?: string | null
+  imsi?: string | null
+  antivol?: boolean | null
+  geolocation?: boolean | null
+  fleetManagement?: boolean | null
+  otherOption?: boolean | null
+  camera?: boolean | null
+  alarm?: boolean | null
+  buzzer?: boolean | null
+  canClick?: boolean | null
+  alimentationRed?: boolean | null
+  alimentationYellow?: boolean | null
+  acc?: boolean | null
+  immobilisationCable?: boolean | null
+  fuelGauge?: boolean | null
+  canH?: boolean | null
+  canL?: boolean | null
+  observations?: string | null
+  battery12vOk?: boolean | null
+  kitGpsConnected?: boolean | null
+  engineStartsWell?: boolean | null
+  dashboardDefaults?: boolean | null
+  buttonsDefaults?: boolean | null
+  climRadioDefaults?: boolean | null
+  installerName?: string | null
+  date?: string | null
+  ficheUrl?: string | null
+  createdAt?: string
+  updatedAt?: string
 }
 
 /** Create: POST `/tasks/installation-form` or `/tasks/intervention-form` with `taskId` in JSON (per API). */
@@ -218,6 +262,8 @@ export type TaskListItem = {
   form?: TaskFormRow & { ficheUrl?: string | null }
   /** Present on `GET /tasks/submitted` and when task detail includes `forms`. */
   forms?: TaskFormInstallation[]
+  /** Server-side drafts for this task. */
+  drafts?: TaskFormDraftServer[]
 }
 
 export type TaskCreatePayload = {
@@ -370,6 +416,27 @@ export const tasksApi = {
   deleteTask: async (taskId: string) => {
     const resp = await apiClient.delete(`/tasks/${taskId}`)
     return resp.data
+  },
+
+  // --- Drafts ---
+
+  saveDraft: async (taskId: string, draftId: number | null, payload: Record<string, unknown>) => {
+    if (draftId) {
+      const resp = await apiClient.patch(`/tasks/${taskId}/drafts/${draftId}`, payload)
+      return resp.data as { draft: TaskFormDraftServer }
+    }
+    const resp = await apiClient.post(`/tasks/${taskId}/drafts`, payload)
+    return resp.data as { draft: TaskFormDraftServer }
+  },
+
+  deleteDraft: async (taskId: string, draftId: number) => {
+    const resp = await apiClient.delete(`/tasks/${taskId}/drafts/${draftId}`)
+    return resp.data as { success: boolean; draftId: number }
+  },
+
+  listDrafts: async (taskId: string) => {
+    const resp = await apiClient.get(`/tasks/${taskId}/drafts`)
+    return resp.data as { drafts: TaskFormDraftServer[] }
   },
 }
 

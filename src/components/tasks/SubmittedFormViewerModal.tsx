@@ -5,6 +5,7 @@ import {
   readTaskFormField,
   tasksApi,
   type TaskFormInstallation,
+  type TaskFormDraftServer,
 } from '../../api/tasks'
 import type { InterventionForm } from '../../store/useAppStore'
 
@@ -15,6 +16,8 @@ type Props = {
   onClose: () => void
   /** Shown in the header (e.g. task client name). */
   taskLabel?: string
+  /** When viewing a server-side draft instead of a submitted form. */
+  draft?: TaskFormDraftServer | null
 }
 
 function asRecord(f: TaskFormInstallation): FormRecord {
@@ -321,16 +324,67 @@ function resolveFicheUrl(raw: Record<string, unknown>): string | undefined {
   return String(v).trim() || undefined
 }
 
-export function SubmittedFormViewerModal({ form, onClose, taskLabel }: Props) {
-  if (!form) return null
+/** Convert a server-side draft into a FormRecord for display in the modal. */
+function draftToFormRecord(draft: TaskFormDraftServer): FormRecord {
+  return {
+    id: draft.id,
+    taskId: draft.taskId,
+    client: draft.client,
+    vehicleMakeModel: draft.vehicleMakeModel,
+    immatriculation: draft.immatriculation,
+    year: draft.year,
+    odometer: draft.odometer,
+    chassis: draft.chassis,
+    operatorCode: draft.operatorCode,
+    country: draft.country,
+    simNumber: draft.simNumber,
+    imsi: draft.imsi,
+    antivol: draft.antivol,
+    geolocation: draft.geolocation,
+    fleetManagement: draft.fleetManagement,
+    otherOption: draft.otherOption,
+    camera: draft.camera,
+    alarm: draft.alarm,
+    buzzer: draft.buzzer,
+    canClick: draft.canClick,
+    alimentationRed: draft.alimentationRed,
+    alimentationYellow: draft.alimentationYellow,
+    acc: draft.acc,
+    immobilisationCable: draft.immobilisationCable,
+    fuelGauge: draft.fuelGauge,
+    canH: draft.canH,
+    canL: draft.canL,
+    observations: draft.observations,
+    battery12vOk: draft.battery12vOk,
+    kitGpsConnected: draft.kitGpsConnected,
+    engineStartsWell: draft.engineStartsWell,
+    dashboardDefaults: draft.dashboardDefaults,
+    buttonsDefaults: draft.buttonsDefaults,
+    climRadioDefaults: draft.climRadioDefaults,
+    installerName: draft.installerName,
+    date: draft.date,
+    ficheUrl: draft.ficheUrl ?? null,
+    createdAt: draft.createdAt,
+    updatedAt: draft.updatedAt,
+  } as unknown as FormRecord
+}
 
-  const record = asRecord(form)
+export function SubmittedFormViewerModal({ form, onClose, taskLabel, draft }: Props) {
+  const isDraft = Boolean(draft)
+  const record = draft ? draftToFormRecord(draft) : form ? asRecord(form) : null
+  if (!record) return null
+
   const raw = record as Record<string, unknown>
-  const instRaw = readTaskFormField(raw, 'installationIndex')
-  const idx =
-    instRaw != null && instRaw !== ''
-      ? `Installation ${String(instRaw)}`
-      : `Fiche #${record.id}`
+
+  const headerLabel = isDraft
+    ? 'Brouillon'
+    : (() => {
+        const instRaw = readTaskFormField(raw, 'installationIndex')
+        return instRaw != null && instRaw !== ''
+          ? `Installation ${String(instRaw)}`
+          : `Fiche #${record.id}`
+      })()
+
   const ficheUrlForPreview = resolveFicheUrl(raw)
 
   return (
@@ -347,17 +401,28 @@ export function SubmittedFormViewerModal({ form, onClose, taskLabel }: Props) {
         aria-labelledby="submitted-form-viewer-title"
         className="animate-scale-in relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
       >
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4">
+        <div className={`flex shrink-0 items-center justify-between gap-3 border-b px-5 py-4 ${isDraft ? 'border-amber-200 bg-amber-50/60' : 'border-slate-200 bg-white'}`}>
           <div className="flex items-center gap-3 min-w-0">
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-sky-50 text-sky-600">
+            <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${isDraft ? 'bg-amber-100 text-amber-600' : 'bg-sky-50 text-sky-600'}`}>
               <svg className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                {isDraft ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                )}
               </svg>
             </div>
             <div className="min-w-0">
-              <h2 id="submitted-form-viewer-title" className="text-base font-bold text-slate-900">
-                {idx}
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 id="submitted-form-viewer-title" className={`text-base font-bold ${isDraft ? 'text-amber-900' : 'text-slate-900'}`}>
+                  {headerLabel}
+                </h2>
+                {isDraft ? (
+                  <span className="rounded-full bg-amber-200/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800">
+                    {draft!.formStep === 'SIGNED_FICHE' ? 'Etape 2/2' : 'Etape 1/2'}
+                  </span>
+                ) : null}
+              </div>
               {taskLabel ? <p className="truncate text-xs text-slate-500">{taskLabel}</p> : null}
             </div>
           </div>
